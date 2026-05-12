@@ -80,14 +80,12 @@ sends from `auth@<sub>.<root>` and CloudFront serves at
 ## Mode B — External DNS
 
 **When**: the user owns the domain at a registrar like Cloudflare,
-Namecheap, GoDaddy, etc. — and is willing to copy DNS records manually
-between deploys.
+Namecheap, GoDaddy, etc. — and is willing to copy DNS records once.
 
 `hereyaconfig/hereyavars/hereya--aws-app-lambda.yaml`:
 
 ```yaml
 domain: "app.example.com"
-# subdomainName has no effect in this mode (you already pinned domain)
 ```
 
 `hereyaconfig/hereyavars/hereya--postmark-app-server.yaml`:
@@ -97,7 +95,7 @@ domain: "app.example.com"
 provisionDomain: true
 ```
 
-**Deploy is three passes:**
+**Deploy is two passes.**
 
 1. **First pass** — provisioning emits CFn outputs:
    - `dnsRecordCertValidationApex*` (CNAME for ACM)
@@ -108,17 +106,27 @@ provisionDomain: true
    - `dnsRecordCloudfrontApex*` / `dnsRecordCloudfrontWww*` (CNAME to
      the CloudFront distribution)
 
-   Tell the user to copy all six records to their DNS provider.
+   The CloudFront distribution comes up immediately on its default
+   `*.cloudfront.net` cert (the custom-domain aliases stay off until
+   the cert is `ISSUED`). Tell the user to copy all six records to
+   their DNS provider.
 
-2. **Second pass** — once the records are live, redeploy. The cert
-   becomes `ISSUED`; the deploy package writes that status to SSM.
+2. **Second pass** — once the records are live and ACM has validated
+   the cert (DNS propagation + ACM's poll cadence; usually a few
+   minutes), redeploy. The package's synth reads the cert's live
+   status directly from ACM (`aws acm list-certificates` keyed on the
+   domain name) and, on seeing `ISSUED`, attaches the apex + www
+   aliases plus the ACM cert to the CloudFront distribution in a
+   single CFn update.
 
-3. **Third pass** — redeploy once more. The package's synth reads the
-   SSM status, flips `aliasesEnabledForDistribution = true`, and
-   attaches the apex + www aliases to CloudFront.
+After pass two: `https://app.example.com` is live, Postmark sends from
+`auth@app.example.com`.
 
-After pass three: `https://app.example.com` is live, Postmark sends
-from `auth@app.example.com`.
+> **No SSM round-trip.** Earlier versions of `hereya/aws-app-lambda`
+> bridged the synth-time / deploy-time gap by writing the cert status
+> to `/hereya/<stack>/certStatus` in SSM, which forced a third deploy
+> to read it back. As of `0.5.1` the package queries ACM directly at
+> synth time — the cert itself is the single source of truth.
 
 ---
 
