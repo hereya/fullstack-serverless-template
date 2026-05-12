@@ -1,0 +1,7 @@
+---
+import Base from '../layouts/Base.astro';
+import { HyOAuthConsent } from '../components/OAuthConsent';
+---
+<Base title="Connect MCP client">
+  <HyOAuthConsent client:only="lit" />
+</Base>

@@ -1,0 +1,23 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="About">
+  <h1>About</h1>
+  <p class="text-neutral-600">
+    This template is a working starter that demonstrates the Hereya serverless
+    story:
+  </p>
+  <ul class="list-disc space-y-1 pl-6 text-sm text-neutral-700">
+    <li>Astro static frontend served from S3 through CloudFront</li>
+    <li>
+      Hono backend on Lambda, mounted at <code class="rounded bg-neutral-100 px-1">/api/*</code> on the same CloudFront distribution
+    </li>
+    <li>Aurora Serverless v2 accessed via the Data API (no VPC required)</li>
+    <li>DynamoDB for sessions + RBAC (users, roles, permissions)</li>
+    <li>Passwordless auth via Cognito Custom Auth Flow + Postmark email</li>
+  </ul>
+  <p class="text-sm text-neutral-600">
+    No CORS, no separate API origin — a single distribution serves both the
+    static frontend and the API.
+  </p>
+</Base>

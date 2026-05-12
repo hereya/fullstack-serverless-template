@@ -1,0 +1,27 @@
+{
+  "name": "hereya-fullstack-serverless-template",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "dev": "concurrently -k -n backend,frontend -c green,blue \"npm:dev --workspace=apps/backend\" \"npm:dev --workspace=apps/frontend\"",
+    "db:generate": "npm run db:generate --workspace=apps/backend",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:drop-all": "tsx scripts/db-drop-all.ts",
+    "rbac:verify": "tsx scripts/verify-rbac.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "esbuild": "^0.28.0"
+  }
+}

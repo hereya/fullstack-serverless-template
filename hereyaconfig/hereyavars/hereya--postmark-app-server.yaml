@@ -1,0 +1,15 @@
+# Auto-Route53 mode.
+#
+# The workspace exposes `defaultRootDomain` (a Route 53 hosted zone it
+# owns). The package generates a random collision-safe subdomain via
+# random_pet and creates DKIM + return-path records in the hosted zone
+# automatically — no manual DNS work.
+#
+# `effectiveDomain` lands in the workspace env so downstream packages
+# (e.g. hereya/aws-app-lambda for CloudFront) align on the same domain.
+#
+# postmarkAccountToken comes from a workspace secret. Each workspace
+# gets its own unique Postmark domain registration since the random
+# subdomain differs per workspace.
+
+provisionDomain: true

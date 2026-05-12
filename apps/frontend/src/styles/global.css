@@ -1,0 +1,79 @@
+@import 'tailwindcss';
+
+@layer base {
+  body {
+    @apply min-h-screen bg-neutral-50 text-neutral-900 antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  h1 {
+    @apply text-2xl font-semibold tracking-tight text-neutral-900;
+  }
+  h2 {
+    @apply text-lg font-semibold text-neutral-900;
+  }
+  a {
+    @apply text-blue-600 hover:text-blue-700;
+  }
+}
+
+/* Component classes are flat (no @apply-chaining of other custom classes —
+   Tailwind v4 rejects that). The shared button base is duplicated across
+   the four variants; the alternative would be a CSS custom-property mixin
+   which is more code than copy-pasting four short lists.  */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium
+           bg-blue-600 text-white hover:bg-blue-700
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium
+           border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium
+           text-blue-600 hover:bg-blue-50
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium
+           border border-red-300 bg-white text-red-700 hover:bg-red-50
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2;
+  }
+
+  .input {
+    @apply block w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm
+           text-neutral-900 placeholder:text-neutral-400
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  }
+
+  .label {
+    @apply mb-1 block text-sm font-medium text-neutral-700;
+  }
+
+  .card {
+    @apply rounded-lg border border-neutral-200 bg-white shadow-sm;
+  }
+
+  .badge-neutral {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+           bg-neutral-100 text-neutral-700;
+  }
+  .badge-admin {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+           bg-amber-100 text-amber-800;
+  }
+  .badge-active {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+           bg-emerald-100 text-emerald-800;
+  }
+  .badge-warn {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+           bg-red-100 text-red-800;
+  }
+}

@@ -1,0 +1,15 @@
+---
+import Base from '../../layouts/Base.astro';
+import { HyAdminTabs } from '../../components/AdminTabs';
+import { HyAdminUsers } from '../../components/AdminUsers';
+---
+<Base title="Admin · Users">
+  <div class="space-y-1">
+    <h1>Users</h1>
+    <p class="text-sm text-neutral-500">
+      Admin · authorize who can sign in
+    </p>
+  </div>
+  <HyAdminTabs current="users" client:only="lit" />
+  <HyAdminUsers client:only="lit" />
+</Base>

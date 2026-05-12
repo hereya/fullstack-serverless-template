@@ -1,0 +1,15 @@
+---
+import Base from '../../layouts/Base.astro';
+import { HyAdminTabs } from '../../components/AdminTabs';
+import { HyAdminIntegrations } from '../../components/AdminIntegrations';
+---
+<Base title="Admin · Integrations">
+  <div class="space-y-1">
+    <h1>MCP integrations</h1>
+    <p class="text-sm text-neutral-500">
+      Admin · manage AI agents connected via MCP
+    </p>
+  </div>
+  <HyAdminTabs current="integrations" client:only="lit" />
+  <HyAdminIntegrations client:only="lit" />
+</Base>

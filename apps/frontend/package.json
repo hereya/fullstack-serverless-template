@@ -1,0 +1,33 @@
+{
+  "name": "frontend",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "vitest run",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/lit": "^4.3.0",
+    "@lit-labs/ssr": "^3.2.2",
+    "@lit-labs/ssr-client": "^1.1.7",
+    "@lit-labs/ssr-dom-shim": "^1.2.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@webcomponents/template-shadowroot": "^0.2.1",
+    "astro": "^6.3.1",
+    "lit": "^3.2.0",
+    "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "@open-wc/testing-helpers": "^3.0.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@vitest/coverage-v8": "^4.1.5",
+    "happy-dom": "^20.9.0",
+    "vitest": "^4.1.5"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1778511121037,
+      "tag": "0000_even_supernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778514523883,
+      "tag": "0001_whole_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778579788549,
+      "tag": "0002_dear_hedge_knight",
+      "breakpoints": true
+    }
+  ]
+}

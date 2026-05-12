@@ -1,0 +1,14 @@
+# Per-app prefix on the workspace's shared S3 bucket. The workspace is
+# expected to expose `bucketArn` + `bucketName` (typically via a
+# workspace-level hereya/aws-s3-shared); this package layers a scoped
+# IAM policy on top and emits `s3Prefix`.
+#
+# The package defaults `prefix` to the (sanitized) stack name — fine
+# for prod, but the hereya CDK harness uses an opaque p-<guid> stack
+# name, which gives ugly keys like:
+#     s3://<workspace-bucket>/p-09405953-…/notes/abc/…
+#
+# Pin a friendly prefix so the object layout is human-readable in the
+# S3 console. The backend reads `process.env.s3Prefix` and prepends it
+# to every key (see apps/backend/src/storage/s3.ts).
+prefix: "fullstack-app"

@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import { HyLoginForm } from '../components/LoginForm';
+---
+<Base title="Sign in">
+  <div class="space-y-2 text-center">
+    <h1>Sign in</h1>
+    <p class="text-sm text-neutral-600">
+      Enter your email and we&apos;ll send you a one-time code.
+    </p>
+  </div>
+  <HyLoginForm client:only="lit" />
+</Base>
