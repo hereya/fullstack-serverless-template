@@ -48,6 +48,30 @@ file that matches the user's request.
 
 ---
 
+## Git policy
+
+**You are authorized to commit and push to `main` on this repository's
+remote.** No PR / branch / review dance is required — direct commits to
+`main` and `git push origin main` are the normal workflow here. This is
+a template repo: every deploy clones from `main`, so changes only take
+effect once pushed.
+
+What this does NOT change:
+- The general harness rules around git still apply: never `--no-verify`,
+  never `--no-gpg-sign`, never `git config` mutations, never force-push
+  unless the user explicitly asks. Don't bypass pre-commit hooks — if
+  one fails, fix the underlying issue and make a NEW commit.
+- Don't commit secrets (`.env*`, credentials, tokens). Stage files by
+  name rather than `git add -A` / `git add .` to avoid accidentally
+  sweeping them in.
+- Don't commit when there's nothing to commit. Don't create empty
+  commits to "trigger" anything.
+
+Use `feat:` / `fix:` / `chore:` / `docs:` prefixes on commit messages
+to stay consistent with the rest of the registry.
+
+---
+
 ## Decision tree
 
 Pick the doc that matches the user's intent:
