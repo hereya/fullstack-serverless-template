@@ -6,7 +6,7 @@ packages:
   aws/cognito:
     version: 0.3.3
   hereya/postmark-app-server:
-    version: 0.2.3
+    version: 0.2.4
   # Scopes IAM access on the workspace's shared S3 bucket to a per-app
   # prefix and emits `s3Prefix` + a prefix-bounded `iamPolicyAwsS3Bucket`.
   # The shared bucket itself is provisioned by the workspace (via a
