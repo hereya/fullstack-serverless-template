@@ -113,11 +113,17 @@ provisionDomain: true
 
 2. **Second pass** — once the records are live and ACM has validated
    the cert (DNS propagation + ACM's poll cadence; usually a few
-   minutes), redeploy. The package's synth reads the cert's live
-   status directly from ACM (`aws acm list-certificates` keyed on the
-   domain name) and, on seeing `ISSUED`, attaches the apex + www
-   aliases plus the ACM cert to the CloudFront distribution in a
-   single CFn update.
+   minutes), redeploy. Two things happen in this one pass:
+   - The `aws-app-lambda` package's synth reads the cert's live status
+     directly from ACM (`aws acm list-certificates` keyed on the
+     domain name) and, on seeing `ISSUED`, attaches the apex + www
+     aliases plus the ACM cert to the CloudFront distribution.
+   - The `postmark-app-server` package's apply fires
+     `PUT /domains/<id>/verifyDkim` and `verifyReturnPath` directly
+     against Postmark's API, forcing an immediate authoritative DNS
+     lookup on Postmark's side instead of waiting ~5 minutes for
+     Postmark's own poll cycle. Idempotent — Postmark returns
+     "already verified" once done; subsequent applies are no-ops.
 
 After pass two: `https://app.example.com` is live, Postmark sends from
 `auth@app.example.com`.
