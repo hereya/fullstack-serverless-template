@@ -1,5 +1,5 @@
 // Helpers for login-only pages (/login) that send already-authenticated
-// visitors back to /dashboard (or wherever ?next= points).
+// visitors back to /admin/users (or wherever ?next= points).
 //
 // Split into a synchronous cache-only check and an async background
 // confirmation so /login can render the form optimistically on first
@@ -19,7 +19,7 @@ export { getNextPath };
  * No network round-trip. ~0.5 ms. Use this for the first-paint decision.
  */
 export function loginRedirectFromCache(
-  fallback = '/dashboard',
+  fallback = '/admin/users',
 ): { redirect: string } | { ready: true } {
   const cached = snapshot();
   if (cached.kind === 'user') return { redirect: getNextPath(fallback) };
@@ -39,7 +39,7 @@ export function loginRedirectFromCache(
  * trade-off for not making every anon visitor wait on /me.
  */
 export async function confirmLoginRedirect(
-  fallback = '/dashboard',
+  fallback = '/admin/users',
 ): Promise<{ redirect: string } | null> {
   const resolved = await resolveAuth();
   if (resolved.kind === 'user') return { redirect: getNextPath(fallback) };

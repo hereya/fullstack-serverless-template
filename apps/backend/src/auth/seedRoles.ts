@@ -1,26 +1,23 @@
 // Cold-start role bootstrap. Called from handler.ts (Lambda) and dev-
-// server.ts (local) so the authRolesTable always has at least the default
-// roles before any request handler runs.
+// server.ts (local) so the authRolesTable always has at least the
+// default admin role before any request handler runs.
 //
-// Behavior differs by role:
+// Admin is force-overwritten to ALL_PERMISSIONS on every cold start.
+// The semantic of "admin" is "every permission the app currently
+// defines", so adding a new permission constant in permissions.ts
+// must propagate to admins without a manual update step. The
+// createdAt of an existing row is preserved.
 //
-//   • admin  → ALWAYS force-overwritten to ALL_PERMISSIONS. The semantic
-//              of "admin" is "every permission the app currently defines",
-//              so adding a new permission constant in permissions.ts must
-//              propagate to admins without a manual update step. The
-//              createdAt of an existing row is preserved.
-//   • member → seeded ONLY when missing. Once present, never overwritten —
-//              a future admin UI can grant/revoke permissions on the
-//              member role without those edits being clobbered.
+// The minimal template ships only the admin role. Projects that want a
+// distinct "member" role with a curated subset of permissions can add
+// it here — the upsertRoleIfMissing helper is the right tool (seeds
+// only when absent; a future admin UI can grant/revoke without those
+// edits being clobbered on next cold start).
 //
 // Failures are logged but don't fail init.
 
-import {
-  ALL_PERMISSIONS,
-  MEMBER_PERMISSIONS,
-  invalidateRoleCache,
-} from './permissions.js';
-import { upsertRoleIfMissing, upsertRoleOverwrite } from './roles.js';
+import { ALL_PERMISSIONS, invalidateRoleCache } from './permissions.js';
+import { upsertRoleOverwrite } from './roles.js';
 
 let seedPromise: Promise<void> | null = null;
 
@@ -31,11 +28,6 @@ export function ensureDefaultRolesSeeded(): Promise<void> {
         'admin',
         ALL_PERMISSIONS,
         'Administrator — all permissions, including managing other users',
-      );
-      await upsertRoleIfMissing(
-        'member',
-        MEMBER_PERMISSIONS,
-        'Member — access to their own notes',
       );
       // Drop any in-flight role-permission cache entries: if a previous
       // cold start cached the OLD admin permissions, a new permission

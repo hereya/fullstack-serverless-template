@@ -1,34 +1,24 @@
 import { handle } from 'hono/aws-lambda';
 import { resolveSecrets } from './secrets.js';
-import { warmupCluster, isTransient } from './db/resilience.js';
 import { ensureDefaultRolesSeeded } from './auth/seedRoles.js';
 
-// Cold-start init runs all the slow setup in parallel so the first user
+// Cold-start init runs the slow setup in parallel so the first user
 // request doesn't wait sequentially:
 //   • resolveSecrets()             — one Secrets Manager Get if there are any
 //                                     secret:// outputs to inject as env vars
-//   • warmupCluster()               — wakes Aurora Serverless v2 (paused →
-//                                     active) with retry, so the first /api/notes
-//                                     request doesn't pay the resume delay
-//   • ensureDefaultRolesSeeded()    — idempotent Put of admin + member rows in
-//                                     authRolesTable; condition_not_exists so
-//                                     manual edits to a role's permission set
-//                                     are NEVER overwritten by a re-seed
+//   • ensureDefaultRolesSeeded()    — idempotent upsert of the admin role row in
+//                                     authRolesTable
 //
-// All three swallow errors (logged) rather than rejecting init — a transient
-// failure here would otherwise 500 every request. The downstream code surfaces
-// clear errors when it actually needs these resources.
+// Both swallow errors (logged) rather than rejecting init — a transient
+// failure here would otherwise 500 every request. The downstream code
+// surfaces clear errors when it actually needs these resources.
+//
+// Note: there's no Aurora warmup here. The minimal template doesn't use
+// Aurora. Projects that adopt the notes pattern re-introduce Aurora and
+// re-add a warmupCluster() call to this Promise.all to absorb the cold-
+// start delay before the first /api/notes request.
 const ready = Promise.all([
   resolveSecrets(),
-  warmupCluster().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[handler] cold-start warmup failed (${
-        isTransient(err) ? 'transient' : 'non-transient'
-      }) — will fall back to per-request retry`,
-      err,
-    );
-  }),
   ensureDefaultRolesSeeded().catch((err) => {
     // eslint-disable-next-line no-console
     console.warn('[handler] cold-start role seed failed', err);

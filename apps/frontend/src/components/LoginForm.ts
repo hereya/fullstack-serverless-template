@@ -56,7 +56,7 @@ export class HyLoginForm extends LitElement {
   // `ready` mirrors the previous React `useRedirectIfAuthed` semantics:
   // we render nothing until we know the visitor is anon, otherwise the
   // form would flash before window.location.replace() lands them on
-  // /dashboard.
+  // /admin/users.
   @state() private ready = false;
   @state() private step: Step = 'email';
   @state() private email = '';
@@ -77,7 +77,7 @@ export class HyLoginForm extends LitElement {
     // 1) Synchronous cache check. If we already know the visitor is signed
     //    in (state=user, cached session expiry still in the future), redirect
     //    immediately — don't bother rendering the form.
-    const cached = loginRedirectFromCache('/dashboard');
+    const cached = loginRedirectFromCache('/admin/users');
     if ('redirect' in cached) {
       window.location.replace(cached.redirect);
       return;
@@ -94,7 +94,7 @@ export class HyLoginForm extends LitElement {
     //    actually signed in (rare: stale tab session, just-cleared cache),
     //    redirect them away. They saw the form briefly — acceptable
     //    trade-off for the common-case speedup.
-    const confirmed = await confirmLoginRedirect('/dashboard');
+    const confirmed = await confirmLoginRedirect('/admin/users');
     if (confirmed) window.location.replace(confirmed.redirect);
   }
 
@@ -174,7 +174,7 @@ export class HyLoginForm extends LitElement {
       // and let AuthNav's mount on the next page populate it from /me.
       clearAuthCache();
       bumpAuthSync();
-      window.location.href = getNextPath('/dashboard');
+      window.location.href = getNextPath('/admin/users');
     } catch (err) {
       this.error = friendlyLoginError(err, 'Invalid code. Try again.');
     } finally {

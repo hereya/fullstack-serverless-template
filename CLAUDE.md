@@ -1,35 +1,38 @@
 # CLAUDE.md — agent guide for this template
 
-This repo is a Hereya-orchestrated Astro + Hono + AWS Lambda monorepo that
-can be progressively shaped from a static landing page into a full SaaS
-app. **All infrastructure packages are pre-provisioned and ready in the
-workspace — the app decides which ones to use by which code it writes.**
+This repo is a Hereya-orchestrated Astro + Hono + AWS Lambda monorepo.
+**The minimal template ships four things**: a static landing, a public
+registration form, an admin page, and an MCP server. Everything beyond
+that is a **pattern** the agent applies on demand — see the catalogue
+below.
 
 It also ships an **MCP endpoint at `<app-url>/mcp`** (OAuth-authenticated
 per the MCP auth spec) so admins can drive the app from an AI agent.
 
-This file is the entry point. Read the hard rules, then jump to the topic
-file that matches the user's request.
+This file is the entry point. Read the hard rules, then jump to the
+pattern doc that matches the user's request.
 
 ---
 
 ## Hard rules (non-negotiable)
 
 1. **Do NOT edit package internals.** Hereya packages (`hereya/aws-…`,
-   `aws/cognito`, etc.) live OUTSIDE this template, in the registry. Never
-   open or modify anything under `node_modules/` or in another repo. If a
-   desired change requires patching a package, **stop and tell the user**.
-2. **Do NOT edit `hereya.yaml`.** Don't add packages, remove packages, or
-   bump versions. The packages declared there are always provisioned in
-   the workspace. Idle infra costs nothing in this setup, so you never
-   need to gate availability.
+   `aws/cognito`, etc.) live OUTSIDE this template, in the registry.
+   Never open or modify anything under `node_modules/` or in another
+   repo. If a desired change requires patching a package, **stop and
+   tell the user**.
+2. **`hereya.yaml` adds new packages only when a pattern requires it.**
+   Patterns that need infra (e.g. notes → Aurora) DO add their package
+   to `hereya.yaml` — that's expected and called out in each pattern
+   doc. Don't *remove* a package; idle infra costs nothing in this setup.
 3. **`hereyaconfig/hereyavars/*.yaml` IS editable** — those are package
    *parameters*, not package code. Use them to flip a package between
-   modes (e.g., auto-Route 53 vs. external DNS for the custom domain).
+   modes (e.g. auto-Route 53 vs. external DNS for the custom domain).
 4. **"Use" vs. "don't use" a feature is a CODE decision.** A
-   marketing-only app simply doesn't write code that calls auth / DB /
-   Postmark / S3. Packages stay in `hereya.yaml`; env vars still arrive in
-   the Lambda; nothing breaks if the code never touches them.
+   marketing-only app simply doesn't write code that calls the
+   pattern-specific helpers. Packages stay in `hereya.yaml`; env vars
+   still arrive in the Lambda; nothing breaks if the code never touches
+   them.
 5. **Do NOT invent `hereya` CLI commands.** A separate skill teaches
    Hereya to you. This doc covers **project-specific** commands only —
    the npm scripts defined in this repo. For anything that needs to
@@ -45,6 +48,47 @@ file that matches the user's request.
    `apps/backend/src/mcp/handlers/`. The MCP server is schema-immutable:
    never add a tool that runs migrations, executes raw SQL, or
    otherwise touches DB structure. See [`docs/mcp.md`](docs/mcp.md).
+8. **Data layer rule of thumb.** Simple key/value or schema-less data
+   (registrations, feature flags, OAuth state, anything "I just need
+   a row I can look up by id") → DynamoDB (provisioned by
+   `aws/cognito` for auth and by `hereya/aws-ddb-app-state` for app
+   state). Relational app data with real structure (notes, posts,
+   joins, transactions) → Aurora Postgres + Drizzle, via the
+   [notes pattern](docs/patterns/notes.md). Aurora auto-pauses when
+   idle so user-facing paths that hit it pay a cold-start tax — only
+   use it when the relational model is worth the latency.
+
+---
+
+## Adding a feature (pattern catalogue)
+
+Common features beyond the minimal template surface live as **patterns** —
+self-contained step-by-step docs. Read the relevant one and apply it
+verbatim. Each pattern is designed to be runnable by a future agent
+without back-references to prior context.
+
+| Pattern | Use when |
+|---|---|
+| [notes / CRUD app data](docs/patterns/notes.md) | The user wants a feature with real relational structure: posts, todos, a knowledge base, anything with joins. Adds Drizzle + Aurora. |
+| [file attachments](docs/patterns/attachments.md) | A feature needs user-uploaded files (images, PDFs). Uses the S3 package already in `hereya.yaml`. |
+| [richer registration form](docs/patterns/richer-registration.md) | The default email-only registration form needs name / company / event-specific fields. |
+
+If you need a pattern that's not listed, build it; when it works, write
+the pattern doc and add it to this table.
+
+---
+
+## Post-deploy onboarding
+
+When the user says "help me get set up" (or similar) right after a
+fresh `hereya deploy`, read [`docs/getting-started.md`](docs/getting-started.md)
+and walk them through it:
+
+1. Open the deployed app URL → click Login → request OTP for their email.
+2. First sign-in becomes admin automatically (the `createFirstAdmin`
+   bootstrap in `apps/backend/src/auth/users.ts`).
+3. Connect Claude Desktop (or another MCP client) to `<app-url>/mcp`.
+4. Verify with a tool call: ask Claude to "list users".
 
 ---
 
@@ -64,30 +108,10 @@ What this does NOT change:
 - Don't commit secrets (`.env*`, credentials, tokens). Stage files by
   name rather than `git add -A` / `git add .` to avoid accidentally
   sweeping them in.
-- Don't commit when there's nothing to commit. Don't create empty
-  commits to "trigger" anything.
+- Don't commit when there's nothing to commit.
 
 Use `feat:` / `fix:` / `chore:` / `docs:` prefixes on commit messages
 to stay consistent with the rest of the registry.
-
----
-
-## Decision tree
-
-Pick the doc that matches the user's intent:
-
-| User's goal | Read |
-|---|---|
-| "Marketing site / landing page only" | [`docs/use-cases.md#static-only`](docs/use-cases.md#static-only) |
-| "Marketing + email waitlist" | [`docs/use-cases.md#waitlist`](docs/use-cases.md#waitlist) |
-| "App with login and protected pages" | [`docs/use-cases.md#auth-gated`](docs/use-cases.md#auth-gated) |
-| "Full SaaS / CRUD app" | [`docs/use-cases.md#fullstack`](docs/use-cases.md#fullstack) |
-| "Add ecommerce / Stripe" | [`docs/use-cases.md#ecommerce-upgrade`](docs/use-cases.md#ecommerce-upgrade) |
-| "Wire a custom domain" | [`docs/custom-domain.md`](docs/custom-domain.md) |
-| "Admin wants to drive the app from an AI agent (MCP)" | [`docs/mcp.md`](docs/mcp.md) |
-| "Add a feature" (page, route, table, MCP tool, …) | [`docs/adding-features.md`](docs/adding-features.md) |
-| "How does this thing work?" | [`docs/architecture.md`](docs/architecture.md) |
-| "It's broken" | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
 
 ---
 
@@ -97,43 +121,59 @@ Pick the doc that matches the user's intent:
 .
 ├── CLAUDE.md                       ← you are here
 ├── README.md                       ← human-facing overview
-├── docs/                           ← detailed topic docs (linked above)
-├── hereya.yaml                     ← READ-ONLY (package manifest)
+├── docs/
+│   ├── getting-started.md          ← post-deploy walkthrough (you read this)
+│   ├── architecture.md             ← system design overview
+│   ├── mcp.md                      ← MCP integration details
+│   ├── custom-domain.md            ← custom domain wiring
+│   ├── troubleshooting.md          ← common issues
+│   └── patterns/                   ← apply these on demand
+│       ├── notes.md
+│       ├── attachments.md
+│       └── richer-registration.md
+├── hereya.yaml                     ← package manifest (extend per pattern)
 ├── hereyaconfig/
 │   └── hereyavars/*.yaml           ← editable: package parameters
 ├── apps/
-│   ├── backend/                    ← Hono + Drizzle, runs on Lambda
+│   ├── backend/                    ← Hono, runs on Lambda
 │   │   ├── src/
 │   │   │   ├── app.ts              ← Hono app, route registration
 │   │   │   ├── handler.ts          ← Lambda entry
 │   │   │   ├── dev-server.ts       ← local dev entry
 │   │   │   ├── env.ts              ← env-var schema
-│   │   │   ├── auth/               ← Cognito + RBAC + sessions
-│   │   │   ├── db/                 ← Drizzle ORM, Aurora Data API
+│   │   │   ├── auth/               ← Cognito + RBAC + sessions + stores
+│   │   │   │   ├── sessions.ts     ← DDB session reads/writes
+│   │   │   │   ├── users.ts        ← DDB users + first-admin bootstrap
+│   │   │   │   ├── roles.ts        ← DDB roles + permissions
+│   │   │   │   ├── permissions.ts  ← permission constants + role cache
+│   │   │   │   ├── seedRoles.ts    ← admin role seed on cold start
+│   │   │   │   ├── registrationsStore.ts  ← DDB public registrations
+│   │   │   │   └── oauthStore.ts          ← DDB OAuth/MCP state
 │   │   │   ├── email/              ← Postmark wrapper
 │   │   │   ├── middleware/         ← auth, requirePermission
-│   │   │   ├── routes/             ← auth, admin, notes, newsletter, public
-│   │   │   └── storage/            ← S3 helpers (presigned PUT/GET)
-│   │   ├── drizzle/                ← committed migration SQL
+│   │   │   └── routes/             ← auth, admin, registration, oauth, mcp, public
 │   │   └── tests/                  ← vitest
 │   └── frontend/                   ← Astro static + Lit islands
 │       ├── src/
 │       │   ├── pages/              ← .astro routes
 │       │   ├── components/         ← <hy-*> Lit elements
-│       │   ├── layouts/Base.astro
-│       │   ├── lib/                ← api, skeleton, redirectIfAuthed
+│       │   ├── layouts/            ← Base.astro, AdminBase.astro
+│       │   ├── lib/                ← api, skeleton, authState, redirectIfAuthed
 │       │   └── styles/global.css   ← Tailwind entry
 │       └── test/                   ← vitest
-└── scripts/                        ← db-reset, db-drop-all, db-migrate
 ```
+
+The minimal template has **no `db/` or `drizzle/`** in the backend.
+Those reappear when the notes pattern is applied — see
+[`docs/patterns/notes.md`](docs/patterns/notes.md).
 
 ---
 
 ## Project commands
 
-Only npm scripts. Workspace env (DB conn string, Cognito ids, bucket
-name, …) comes from the user's Hereya skill — these commands assume it's
-already in scope.
+Only npm scripts. Workspace env (DDB table names, Cognito ids, Postmark
+token, …) comes from the user's Hereya skill — these commands assume
+it's already in scope.
 
 ```bash
 # Install
@@ -146,7 +186,6 @@ npm test -w apps/frontend                # frontend only
 
 # Type check
 npm run typecheck -w apps/backend
-npm run typecheck -w apps/frontend       # (alias of `astro check` if defined)
 
 # Dev
 npm run dev                              # both workspaces (concurrent)
@@ -155,15 +194,11 @@ npm run dev -w apps/frontend             # frontend only :4321 (proxies /api →
 
 # Build (what runs before deploy)
 npm run build                            # both workspaces
-
-# Database (Drizzle + Aurora Data API)
-npm run db:generate -w apps/backend      # after editing schema.ts → produces SQL in apps/backend/drizzle/
-npm run db:migrate                       # apply pending migrations (root script)
-
-# Destructive dev helpers (do NOT run in deployed envs)
-node --import tsx scripts/db-reset.ts
-node --import tsx scripts/db-drop-all.ts
 ```
+
+After applying the notes pattern, additional scripts come back:
+`db:generate` (regenerate Drizzle SQL from `schema.ts`) and `db:migrate`
+(apply pending migrations). See the pattern doc.
 
 **Testing protocol**: after any change, run `npm test -w <workspace>` for
 the affected side before declaring the task done. After backend route
@@ -184,15 +219,16 @@ changes, also run `npm run typecheck -w apps/backend`.
   classes apply normally. Always register with `client:only="lit"`, never
   `client:load` — see [docs/troubleshooting.md](docs/troubleshooting.md).
 - **Loading states** use the primitives in `apps/frontend/src/lib/skeleton.ts`
-  (`skelBox`, `skelLine`, `skelTable`, `skelFormCard`, …) plus the
-  `DeferredLoadingController` (200 ms defer + 300 ms minimum-visible —
-  prevents skeleton flash). Don't reinvent.
-- **Auth state lives in DynamoDB** (sessions + users + roles). Aurora is
-  for **application data only**. If you find yourself adding a `users`
-  table in Postgres, stop — that's an architectural mistake.
-- **Permissions** are code constants in `auth/permissions.ts`. The DB-
+  plus the `DeferredLoadingController` (200 ms defer + 300 ms minimum-
+  visible — prevents skeleton flash). Don't reinvent.
+- **/admin/* gate.** All admin pages use `layouts/AdminBase.astro`
+  which injects an inline `<head>` script that synchronously reads
+  `localStorage` and redirects to `/login` BEFORE any body paint if the
+  visitor isn't a cached admin user. See `lib/authState.ts` for the
+  cache schema; do not bypass the gate from any new admin page.
+- **Permissions** are code constants in `auth/permissions.ts`. The DDB-
   side state (which roles grant which permissions) is seeded into DDB on
-  Lambda cold start by `auth/seedRoles.ts` — idempotent, only-if-missing.
+  Lambda cold start by `auth/seedRoles.ts` — idempotent.
 - **Naming**: Lit element class `HyFoo` → custom tag `hy-foo` → file
   `Foo.ts`. Backend route file `foo.ts` exports a Hono sub-app named
   `foo`, registered in `app.ts` under `/api/foo`.
@@ -201,10 +237,15 @@ changes, also run `npm run typecheck -w apps/backend`.
 
 ## What to do next
 
-1. Read the topic file from the decision tree.
-2. Make the smallest correct change. Prefer editing existing files over
+1. If the user is just deployed → walk them through
+   [`docs/getting-started.md`](docs/getting-started.md).
+2. If the user wants a feature → check the **pattern catalogue** above.
+   Apply the matching pattern verbatim. If nothing matches, build the
+   feature and then write a new pattern doc.
+3. Make the smallest correct change. Prefer editing existing files over
    creating new ones.
-3. Run `npm test -w <workspace>` (and `npm run typecheck` for the
+4. Run `npm test -w <workspace>` (and `npm run typecheck` for the
    backend). Don't claim done until tests pass.
-4. If something requires touching `hereya.yaml`, a package's internals,
-   or running `hereya` commands — stop and tell the user.
+5. If something requires patching a package's internals or running
+   `hereya` commands the agent doesn't have a skill for — stop and tell
+   the user.

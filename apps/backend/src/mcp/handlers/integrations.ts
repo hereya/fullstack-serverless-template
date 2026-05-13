@@ -8,52 +8,48 @@
 // handler is permission-agnostic and works for any future role that
 // can authorize MCP clients.
 //
-// "Connection" = one OAuth token-pair plus its client metadata. We
-// don't track last-used today; adding it means a write on every /mcp
-// call, which we punt on as a future enhancement.
+// `tokenId` from the UI is the accessTokenHash (it's the stable PK on
+// the TOKEN# item in DDB). The revoke flow looks up that item, checks
+// ownership against the authenticated user, then stamps revokedAt.
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
-import { getDb } from '../../db/client.js';
-import { dbCall } from '../../db/resilience.js';
-import { oauthClients, oauthTokens } from '../../db/schema.js';
+import {
+  getClient,
+  getTokenByAccessHash,
+  listTokensByUser,
+  revokeToken,
+} from '../../auth/oauthStore.js';
 
 export interface ConnectionView {
   tokenId: string;
   clientId: string;
   clientName: string;
   scope: string;
-  createdAt: Date | string;
-  accessExpiresAt: Date | string;
-  refreshExpiresAt: Date | string;
+  createdAt: string;
+  accessExpiresAt: number;
+  refreshExpiresAt: number;
 }
 
 export async function listConnectionsHandler(opts: {
   userId: string;
 }): Promise<ConnectionView[]> {
-  const rows = await dbCall(
-    () =>
-      getDb()
-        .select({
-          tokenId: oauthTokens.id,
-          clientId: oauthClients.id,
-          clientName: oauthClients.name,
-          scope: oauthTokens.scope,
-          createdAt: oauthTokens.createdAt,
-          accessExpiresAt: oauthTokens.accessExpiresAt,
-          refreshExpiresAt: oauthTokens.refreshExpiresAt,
-        })
-        .from(oauthTokens)
-        .innerJoin(oauthClients, eq(oauthClients.id, oauthTokens.clientId))
-        .where(
-          and(
-            eq(oauthTokens.userId, opts.userId),
-            isNull(oauthTokens.revokedAt),
-          ),
-        )
-        .orderBy(desc(oauthTokens.createdAt)),
-    'integrations.list',
-  );
-  return rows;
+  const tokens = await listTokensByUser(opts.userId);
+  // Hydrate client names. Client cardinality per user is tiny (one or
+  // two MCP apps in practice), so per-row GetItem is fine. A future
+  // optimization could batch-get, but it's overkill here.
+  const out: ConnectionView[] = [];
+  for (const t of tokens) {
+    const client = await getClient(t.clientId);
+    out.push({
+      tokenId: t.tokenId,
+      clientId: t.clientId,
+      clientName: client?.name ?? t.clientId,
+      scope: t.scope,
+      createdAt: t.createdAt,
+      accessExpiresAt: t.accessExpiresAt,
+      refreshExpiresAt: t.refreshExpiresAt,
+    });
+  }
+  return out;
 }
 
 export class ConnectionNotFoundError extends Error {
@@ -63,37 +59,21 @@ export class ConnectionNotFoundError extends Error {
   }
 }
 
-// Revoke = stamp revokedAt. The bearer-token middleware filters on
-// `revokedAt IS NULL`, so the next MCP call from this token returns
-// 401. We do not delete the row so the audit trail survives.
+// Revoke = stamp revokedAt on the TOKEN# row + delete the REFRESH#
+// pointer. revokeToken() in the store does both. The bearer-token
+// middleware filters on `revokedAt IS NULL`, so the next MCP call
+// returns 401.
+//
+// Ownership check is server-side here: we re-fetch the token by ID and
+// confirm the userId matches. Without this, a user could revoke
+// someone else's connection by guessing token hashes.
 export async function revokeConnectionHandler(opts: {
   userId: string;
   tokenId: string;
 }): Promise<void> {
-  // Double-check ownership BEFORE the update — a user can't revoke
-  // someone else's connection by guessing UUIDs.
-  const rows = await dbCall(
-    () =>
-      getDb()
-        .select({ id: oauthTokens.id })
-        .from(oauthTokens)
-        .where(
-          and(
-            eq(oauthTokens.id, opts.tokenId),
-            eq(oauthTokens.userId, opts.userId),
-            isNull(oauthTokens.revokedAt),
-          ),
-        )
-        .limit(1),
-    'integrations.revoke.check',
-  );
-  if (rows.length === 0) throw new ConnectionNotFoundError();
-  await dbCall(
-    () =>
-      getDb()
-        .update(oauthTokens)
-        .set({ revokedAt: new Date() })
-        .where(eq(oauthTokens.id, opts.tokenId)),
-    'integrations.revoke',
-  );
+  const tok = await getTokenByAccessHash(opts.tokenId);
+  if (!tok || tok.userId !== opts.userId) {
+    throw new ConnectionNotFoundError();
+  }
+  await revokeToken(opts.tokenId);
 }

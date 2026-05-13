@@ -111,17 +111,15 @@ export class HyAuthNav extends LitElement {
 
   // Three nav states, chosen so the user never sees information change:
   //
-  //   loading → only the public links (Home / About / Subscribe). Auth-
-  //             dependent elements are absent. Renders briefly only for
-  //             truly fresh visitors (no cache) or after a 5-min idle gap.
+  //   loading → only the public links (Home / About / Register). Auth-
+  //             dependent elements are absent.
   //   anon    → public links + Login.
-  //   user    → public links + Dashboard + [Admin] + email + Logout.
+  //   user    → public links + [Admin] + email + Logout.
   //
   // Because "loading" is a subset of both terminal states, the transition
   // out of "loading" only ADDS elements — it never replaces one auth-aware
-  // element with another. SEO crawlers see exactly this minimal public nav
-  // in the initial HTML, which is correct: Dashboard / Admin are auth-gated
-  // and not useful for indexing.
+  // element with another. SEO crawlers see the minimal public nav in the
+  // initial HTML; Admin is auth-gated and not useful for indexing.
   render() {
     const isUser = this.status === 'user' && this.user !== null;
     const isAnon = this.status === 'anon';
@@ -137,11 +135,10 @@ export class HyAuthNav extends LitElement {
         >
           <a href="/" class="${linkBase} text-neutral-900">Home</a>
           <a href="/about" class=${linkBase}>About</a>
-          <a href="/subscribe" class=${linkBase}>Subscribe</a>
+          <a href="/register" class=${linkBase}>Register</a>
 
           ${isUser && user
             ? html`
-                <a href="/dashboard" class=${linkBase}>Dashboard</a>
                 ${user.roleName === 'admin'
                   ? html`<a href="/admin/users" class=${linkBase}>Admin</a>`
                   : nothing}

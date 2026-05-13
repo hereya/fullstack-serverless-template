@@ -10,11 +10,11 @@ import { customElement, property } from 'lit/decorators.js';
 // inline <head> script that redirects anon visitors BEFORE any body
 // paint, so the tabs can render unconditionally — we only reach here as
 // a cached-user visitor with a session that hasn't naturally expired.
-type Tab = 'users' | 'subscriptions' | 'integrations';
+type Tab = 'users' | 'registrations' | 'integrations';
 
 const tabs: Array<{ key: Tab; href: string; label: string }> = [
   { key: 'users', href: '/admin/users', label: 'Users' },
-  { key: 'subscriptions', href: '/admin/subscriptions', label: 'Subscriptions' },
+  { key: 'registrations', href: '/admin/registrations', label: 'Registrations' },
   { key: 'integrations', href: '/admin/integrations', label: 'Integrations' },
 ];
 

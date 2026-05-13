@@ -20,9 +20,10 @@ export const PERMISSIONS = {
   USERS_LIST: 'users:list',
   USERS_ADD: 'users:add',
   USERS_SUSPEND: 'users:suspend',
-  NEWSLETTER_LIST: 'newsletter:list',
-  NOTES_READ_OWN: 'notes:read:own',
-  NOTES_WRITE_OWN: 'notes:write:own',
+
+  // Public-form registrations (newsletter signups / event signups / etc.).
+  REGISTRATIONS_LIST: 'registrations:list',
+  REGISTRATIONS_DELETE: 'registrations:delete',
 
   // MCP — see docs/mcp.md. `MCP_CONNECT` gates the OAuth consent step
   // (a user without it can't authorize an MCP client at all). Per-tool
@@ -39,12 +40,6 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 // Derived from PERMISSIONS so admin automatically gets any newly-added
 // permission you define without remembering to update a hand-listed array.
 export const ALL_PERMISSIONS: readonly Permission[] = Object.values(PERMISSIONS);
-
-// Default member: own-notes only.
-export const MEMBER_PERMISSIONS: readonly Permission[] = [
-  PERMISSIONS.NOTES_READ_OWN,
-  PERMISSIONS.NOTES_WRITE_OWN,
-];
 
 // In-memory role-cache. Bounded by the Lambda's warm lifetime; refreshes
 // every 60s so role-permission mutations propagate within ~1 min. Lookup

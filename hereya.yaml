@@ -1,24 +1,40 @@
 # project: <auto set>
 # workspace: <auto set>
 packages:
-  hereya/aws-postgres-serverless:
-    version: 0.1.7
+  # New: the minimal template's source of truth for non-auth app state.
+  # Provisions two DDB tables:
+  #   • RegistrationsTable — public registration form submissions
+  #   • OAuthStateTable    — OAuth/MCP machinery (clients, codes, tokens)
+  hereya/aws-ddb-app-state:
+    version: 0.1.0
+
+  # Auth: Cognito + DDB tables for sessions, users, roles, OTP.
   aws/cognito:
     version: 0.3.3
+
+  # OTP email sender. Auto-resolves SSM SecureString for the Postmark
+  # token; the backend reads `postmarkServerToken` as a normal env var.
   hereya/postmark-app-server:
     version: 0.2.4
-  # Scopes IAM access on the workspace's shared S3 bucket to a per-app
-  # prefix and emits `s3Prefix` + a prefix-bounded `iamPolicyAwsS3Bucket`.
-  # The shared bucket itself is provisioned by the workspace (via a
-  # workspace-level hereya/aws-s3-shared), which exposes `bucketArn` +
-  # `bucketName` to this template's env. The backend prepends `s3Prefix`
-  # to every object key in storage/s3.ts.
+
+  # Aurora Postgres for relational app data. NOT used by the minimal
+  # template's code — kept here so patterns that opt in (notes,
+  # full-blown CRUD models) work out of the box. See docs/patterns/notes.md.
+  hereya/aws-postgres-serverless:
+    version: 0.1.7
+
+  # Per-app prefix on the workspace-shared S3 bucket. NOT used by the
+  # minimal template's code — kept here so the attachments pattern
+  # works out of the box. See docs/patterns/attachments.md.
   hereya/aws-file-storage:
     version: 0.1.1
+
 devDeploy:
   hereya/dev-iam-user:
     version: 0.1.1
+
 deploy:
   hereya/aws-app-lambda:
     version: 0.5.2
+
 preDeployCommand: npm install && npm run build

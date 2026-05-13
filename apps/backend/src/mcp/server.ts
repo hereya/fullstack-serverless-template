@@ -16,7 +16,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerUserTools } from './tools/users.js';
 import { registerRoleTools } from './tools/roles.js';
-import { registerSubscriptionsTools } from './tools/subscriptions.js';
+import { registerRegistrationsTools } from './tools/registrations.js';
 import { registerStatsTools } from './tools/stats.js';
 
 export function buildMcpServer(): McpServer {
@@ -26,7 +26,7 @@ export function buildMcpServer(): McpServer {
   });
   registerUserTools(server);
   registerRoleTools(server);
-  registerSubscriptionsTools(server);
+  registerRegistrationsTools(server);
   registerStatsTools(server);
   return server;
 }

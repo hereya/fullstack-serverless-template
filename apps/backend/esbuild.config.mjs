@@ -1,12 +1,15 @@
 import esbuild from 'esbuild';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-// Two entrypoints:
+// Single Lambda entrypoint:
 //   - handler.ts  → dist/handler.js   (main app Lambda, Hono on aws-lambda)
-//   - migrate.ts  → dist/migrate.js   (migration Lambda invoked by CFn Custom Resource)
-// Both share the same bundle deps and ship together inside dist/.
+//
+// The minimal template doesn't ship a migration Lambda — there's no
+// Aurora schema to migrate. Patterns that add Aurora (e.g. the notes
+// pattern in docs/patterns/notes.md) re-introduce a migrate.ts here
+// and add it to the entrypoints list.
 await esbuild.build({
-  entryPoints: ['src/handler.ts', 'src/migrate.ts'],
+  entryPoints: ['src/handler.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',

@@ -5,7 +5,8 @@
 // in lockstep on both behavior and authorization.
 //
 // Convention reminder: when you add a new admin route here, you MUST
-// also add the matching MCP tool. See docs/adding-features.md.
+// also add the matching MCP tool. See docs/patterns/*.md for examples
+// of adding new admin features (notes, attachments, etc.).
 
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -20,7 +21,10 @@ import {
   setSuspendedHandler,
   UserNotFoundError,
 } from '../mcp/handlers/users.js';
-import { listSubscriptionsHandler } from '../mcp/handlers/subscriptions.js';
+import {
+  deleteRegistrationHandler,
+  listRegistrationsHandler,
+} from '../mcp/handlers/registrations.js';
 import {
   ConnectionNotFoundError,
   listConnectionsHandler,
@@ -77,19 +81,28 @@ admin.patch(
   },
 );
 
-// -------- Newsletter subscriptions (admin read-only) --------
+// -------- Registrations (admin) --------
 //
-// Lists rows from the public `newsletter_subscriptions` Postgres table
-// so admins can see who has subscribed via the /subscribe page. Gated
-// by the newsletter:list permission (admin role gets it via
-// ALL_PERMISSIONS). Same handler also powers the `subscriptions_list`
-// MCP tool.
+// Lists rows from the public registrations DDB table so admins can see
+// who has signed up via the /register page. Gated by REGISTRATIONS_LIST
+// for read and REGISTRATIONS_DELETE for delete. Same handlers also power
+// the `registrations_list` and `registrations_delete` MCP tools.
 admin.get(
-  '/subscriptions',
-  requirePermission(PERMISSIONS.NEWSLETTER_LIST),
+  '/registrations',
+  requirePermission(PERMISSIONS.REGISTRATIONS_LIST),
   async (c) => {
-    const subscriptions = await listSubscriptionsHandler();
-    return c.json(subscriptions);
+    const registrations = await listRegistrationsHandler();
+    return c.json(registrations);
+  },
+);
+
+admin.delete(
+  '/registrations/:email',
+  requirePermission(PERMISSIONS.REGISTRATIONS_DELETE),
+  async (c) => {
+    const email = decodeURIComponent(c.req.param('email'));
+    await deleteRegistrationHandler(email);
+    return c.json({ ok: true });
   },
 );
 
@@ -97,13 +110,7 @@ admin.get(
 //
 // Lists / revokes the CURRENT user's own MCP-client connections.
 // Gated on MCP_CONNECT — which currently only admins hold, but the
-// handler is permission-agnostic. If you ever grant MCP_CONNECT to a
-// non-admin role, the route + page just work for them too.
-//
-// No matching MCP tool: a connection-management surface accessed
-// FROM the connection itself is weird (a token revoking itself
-// mid-call), and an admin-revoke-someone-else tool would need a
-// separate permission. Keep it HTTP-only for now.
+// handler is permission-agnostic.
 admin.get(
   '/integrations',
   requirePermission(PERMISSIONS.MCP_CONNECT),
@@ -129,5 +136,20 @@ admin.delete(
       }
       throw err;
     }
+  },
+);
+
+// -------- Stats --------
+//
+// Simple admin dashboard counts. Permissions for STATS_VIEW.
+admin.get(
+  '/stats',
+  requirePermission(PERMISSIONS.STATS_VIEW),
+  async (c) => {
+    const { statsSummaryHandler } = await import(
+      '../mcp/handlers/stats.js'
+    );
+    const summary = await statsSummaryHandler();
+    return c.json(summary);
   },
 );

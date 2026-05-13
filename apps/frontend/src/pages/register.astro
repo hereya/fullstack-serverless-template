@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import { HyRegistration } from '../components/Registration';
+---
+<Base title="Register">
+  <section class="space-y-3 text-center">
+    <h1>Register</h1>
+    <p class="text-sm text-neutral-600">
+      Drop your email and we'll be in touch.
+    </p>
+  </section>
+  <HyRegistration client:only="lit" />
+</Base>

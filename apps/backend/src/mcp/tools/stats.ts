@@ -8,7 +8,7 @@ export function registerStatsTools(server: McpServer): void {
     'stats_summary',
     {
       description:
-        'Aggregate counts for the app: users, notes, attachments, newsletter subscriptions.',
+        'Aggregate counts for the app: users (DDB authUsers) and public-form registrations (DDB registrationsTable).',
       inputSchema: {},
     },
     async (_args, extra) =>
@@ -16,7 +16,7 @@ export function registerStatsTools(server: McpServer): void {
         const stats = await statsSummaryHandler();
         return ok(
           stats,
-          `${stats.userCount} users · ${stats.noteCount} notes · ${stats.attachmentCount} attachments · ${stats.subscriptionCount} subscriptions`,
+          `${stats.userCount} users · ${stats.registrationCount} registrations`,
         );
       }),
   );

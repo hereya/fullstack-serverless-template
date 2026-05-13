@@ -1,0 +1,15 @@
+---
+import AdminBase from '../../layouts/AdminBase.astro';
+import { HyAdminTabs } from '../../components/AdminTabs';
+import { HyAdminRegistrations } from '../../components/AdminRegistrations';
+---
+<AdminBase title="Admin · Registrations">
+  <div class="space-y-1">
+    <h1>Registrations</h1>
+    <p class="text-sm text-neutral-500">
+      Admin · public-form submissions
+    </p>
+  </div>
+  <HyAdminTabs current="registrations" client:only="lit" />
+  <HyAdminRegistrations client:only="lit" />
+</AdminBase>
