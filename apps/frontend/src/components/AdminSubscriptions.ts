@@ -1,6 +1,7 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { api, friendlyError } from '../lib/api';
+import { requireAdmin } from '../lib/authState';
 import {
   DeferredLoadingController,
   skelLineSmall,
@@ -13,7 +14,10 @@ interface Subscription {
   createdAt: string;
 }
 
-type Status = 'loading' | 'forbidden' | 'ready';
+// 'auth-pending' renders nothing — see AdminUsers for the rationale (we
+// gate on the DDB-only /me probe before any Aurora-touching fetch so the
+// admin chrome never appears for anon visitors).
+type Status = 'auth-pending' | 'loading' | 'forbidden' | 'ready';
 
 @customElement('hy-admin-subscriptions')
 export class HyAdminSubscriptions extends LitElement {
@@ -21,13 +25,16 @@ export class HyAdminSubscriptions extends LitElement {
     return this;
   }
 
-  @state() private status: Status = 'loading';
+  @state() private status: Status = 'auth-pending';
   @state() private subs: Subscription[] = [];
   @state() private error: string | null = null;
 
   private loadingDelay = new DeferredLoadingController(this);
 
   async firstUpdated() {
+    const snap = await requireAdmin('/admin/subscriptions');
+    if (snap.kind !== 'user') return;
+    this.status = 'loading';
     try {
       const list = await api<Subscription[]>('/api/admin/subscriptions');
       this.subs = list;
@@ -55,6 +62,7 @@ export class HyAdminSubscriptions extends LitElement {
   }
 
   render() {
+    if (this.status === 'auth-pending') return nothing;
     if (this.status === 'loading' || this.loadingDelay.holdSkeleton) {
       return this.loadingDelay.deferred(this.renderSkeleton());
     }

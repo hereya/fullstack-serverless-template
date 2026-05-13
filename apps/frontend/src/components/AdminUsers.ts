@@ -1,6 +1,7 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { api, friendlyError } from '../lib/api';
+import { requireAdmin } from '../lib/authState';
 import {
   DeferredLoadingController,
   skelButton,
@@ -19,7 +20,13 @@ interface AdminUser {
   createdAt: string;
 }
 
-type Status = 'loading' | 'forbidden' | 'ready';
+// 'auth-pending' is the initial state: we haven't even confirmed the
+// visitor is signed in yet, so the page renders nothing (matches the
+// AdminTabs gate — no admin chrome visible to anon visitors during the
+// Aurora cold-start window). Once requireAdmin resolves we either bounce
+// to /login (no state change needed — navigation takes over) or move to
+// 'loading' and kick off the actual data fetch.
+type Status = 'auth-pending' | 'loading' | 'forbidden' | 'ready';
 
 @customElement('hy-admin-users')
 export class HyAdminUsers extends LitElement {
@@ -27,7 +34,7 @@ export class HyAdminUsers extends LitElement {
     return this;
   }
 
-  @state() private status: Status = 'loading';
+  @state() private status: Status = 'auth-pending';
   @state() private users: AdminUser[] = [];
   @state() private newEmail = '';
   @state() private busy = false;
@@ -35,7 +42,10 @@ export class HyAdminUsers extends LitElement {
 
   private loadingDelay = new DeferredLoadingController(this);
 
-  firstUpdated() {
+  async firstUpdated() {
+    const snap = await requireAdmin('/admin/users');
+    if (snap.kind !== 'user') return; // anon → navigation in progress
+    this.status = 'loading';
     void this.reload();
   }
 
@@ -150,6 +160,12 @@ export class HyAdminUsers extends LitElement {
   }
 
   render() {
+    if (this.status === 'auth-pending') {
+      // Auth gate hasn't resolved yet — render NOTHING so anon visitors
+      // (or anyone waiting on the /me probe) don't see an admin skeleton.
+      // The probe is DDB-only so this state is short-lived (ms, not s).
+      return nothing;
+    }
     if (this.status === 'loading' || this.loadingDelay.holdSkeleton) {
       return this.loadingDelay.deferred(this.renderSkeleton());
     }

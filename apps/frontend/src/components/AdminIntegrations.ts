@@ -1,6 +1,7 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { api, friendlyError } from '../lib/api';
+import { requireAdmin } from '../lib/authState';
 import {
   DeferredLoadingController,
   skelLineSmall,
@@ -17,7 +18,8 @@ interface Connection {
   refreshExpiresAt: string;
 }
 
-type Status = 'loading' | 'forbidden' | 'ready';
+// 'auth-pending' renders nothing — see AdminUsers for the rationale.
+type Status = 'auth-pending' | 'loading' | 'forbidden' | 'ready';
 
 @customElement('hy-admin-integrations')
 export class HyAdminIntegrations extends LitElement {
@@ -25,7 +27,7 @@ export class HyAdminIntegrations extends LitElement {
     return this;
   }
 
-  @state() private status: Status = 'loading';
+  @state() private status: Status = 'auth-pending';
   @state() private connections: Connection[] = [];
   @state() private busyTokenId: string | null = null;
   @state() private error: string | null = null;
@@ -33,6 +35,9 @@ export class HyAdminIntegrations extends LitElement {
   private loadingDelay = new DeferredLoadingController(this);
 
   async firstUpdated() {
+    const snap = await requireAdmin('/admin/integrations');
+    if (snap.kind !== 'user') return;
+    this.status = 'loading';
     await this.reload();
   }
 
@@ -79,6 +84,7 @@ export class HyAdminIntegrations extends LitElement {
   }
 
   render() {
+    if (this.status === 'auth-pending') return nothing;
     if (this.status === 'loading' || this.loadingDelay.holdSkeleton) {
       return this.loadingDelay.deferred(this.renderSkeleton());
     }
