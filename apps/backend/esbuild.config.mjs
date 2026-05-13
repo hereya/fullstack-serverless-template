@@ -1,15 +1,18 @@
 import esbuild from 'esbuild';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-// Single Lambda entrypoint:
+// Two Lambda entrypoints:
 //   - handler.ts  → dist/handler.js   (main app Lambda, Hono on aws-lambda)
+//   - migrate.ts  → dist/migrate.js   (no-op migration Lambda; hereya/
+//                                      aws-app-lambda's Custom Resource
+//                                      requires it to exist even when
+//                                      there's no Aurora schema)
 //
-// The minimal template doesn't ship a migration Lambda — there's no
-// Aurora schema to migrate. Patterns that add Aurora (e.g. the notes
-// pattern in docs/patterns/notes.md) re-introduce a migrate.ts here
-// and add it to the entrypoints list.
+// The minimal template's migrate.ts is a no-op (returns success without
+// running anything). Patterns that add Aurora (e.g. the notes pattern
+// in docs/patterns/notes.md) replace its contents with a real migrator.
 await esbuild.build({
-  entryPoints: ['src/handler.ts'],
+  entryPoints: ['src/handler.ts', 'src/migrate.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',

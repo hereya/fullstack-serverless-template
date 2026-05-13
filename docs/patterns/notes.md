@@ -107,16 +107,41 @@ cd apps/backend && npm run db:generate
 git add drizzle/
 ```
 
-### 4. Wire the migration Lambda
+### 4. Replace the no-op migration Lambda with the real one
 
-The `aws-app-lambda` package supports a "deploy-time migrate" Lambda
-via a CloudFormation Custom Resource. Re-introduce
-`apps/backend/src/migrate.ts` (it was in this repo before the minimal
-refactor — see git history) and add it back to the esbuild entrypoints:
+`apps/backend/src/migrate.ts` already exists as a no-op (the
+aws-app-lambda package requires the Custom Resource handler to exist,
+even when there's nothing to migrate). Replace its contents with:
 
-```js
-// esbuild.config.mjs
-entryPoints: ['src/handler.ts', 'src/migrate.ts'],
+```ts
+import { resolveSecrets } from './secrets.js';
+import { runMigrations } from './db/migrator.js';
+
+interface CfnCustomResourceEvent {
+  RequestType: 'Create' | 'Update' | 'Delete';
+  PhysicalResourceId?: string;
+}
+interface CfnCustomResourceResponse {
+  PhysicalResourceId: string;
+  Data?: Record<string, string>;
+}
+
+const ready = resolveSecrets();
+
+export const handler = async (
+  event: CfnCustomResourceEvent,
+): Promise<CfnCustomResourceResponse> => {
+  const physicalResourceId = event.PhysicalResourceId ?? 'hereya-app-migrations';
+  if (event.RequestType === 'Delete') {
+    return { PhysicalResourceId: physicalResourceId };
+  }
+  await ready;
+  await runMigrations();
+  return {
+    PhysicalResourceId: physicalResourceId,
+    Data: { migratedAt: new Date().toISOString() },
+  };
+};
 ```
 
 Update the build script to also ship the `drizzle/` SQL:
@@ -124,6 +149,9 @@ Update the build script to also ship the `drizzle/` SQL:
 ```jsonc
 "build": "node esbuild.config.mjs && rm -rf dist/drizzle && cp -r drizzle dist/drizzle"
 ```
+
+The esbuild config already lists `src/migrate.ts` as an entrypoint — no
+change needed there.
 
 ### 5. Add env-var entries
 
