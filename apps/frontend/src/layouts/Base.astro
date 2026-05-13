@@ -13,6 +13,13 @@ const { title = 'Hereya Fullstack Serverless' } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
+    {/*
+      Optional head-injection point. Layouts that wrap Base (e.g. AdminBase)
+      use this to inject inline scripts that need to run BEFORE the body
+      is painted — typically auth gates that must redirect-before-paint
+      to avoid flashing chrome at unauthenticated visitors.
+    */}
+    <slot name="head" />
   </head>
   <body>
     {/*

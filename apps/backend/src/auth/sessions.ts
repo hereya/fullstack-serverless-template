@@ -39,6 +39,11 @@ export interface Session {
   email: string;
   roleName: string;
   refreshToken: string;
+  // Unix seconds — when the DDB TTL will reap this row. Fixed at
+  // createSession time (now + 30 days); not extended on use. The client
+  // caches this so it can decide "the session has naturally expired"
+  // synchronously without hitting /me.
+  ttl: number;
 }
 
 function tableName(): string {
@@ -81,6 +86,10 @@ export async function getSession(sessionId: string): Promise<Session | null> {
     email: r.Item.email,
     roleName: (r.Item.roleName as string) ?? 'member',
     refreshToken: r.Item.refreshToken,
+    // `ttl` is required on new rows but old rows written before this
+    // field existed won't have it — fall back to 0 (which the client
+    // interprets as "already expired" → treat as anon → re-auth).
+    ttl: typeof r.Item.ttl === 'number' ? r.Item.ttl : 0,
   };
 }
 

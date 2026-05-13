@@ -1,0 +1,55 @@
+---
+// Layout for /admin/* pages. Wraps Base.astro and injects an inline auth
+// gate in the <head> that runs BEFORE any body paint — synchronous
+// localStorage read, ~0.5 ms, redirects anon visitors to /login without
+// ever painting the static page heading.
+//
+// Why inline-in-<head> and not a Lit gate: Astro emits the static layout
+// HTML synchronously, including the page <h1> + AuthNav scaffolding. Any
+// component-level gate (a constructor read, a firstUpdated check) is
+// already too late — the static chrome is on screen before any island
+// hydrates. The only way to beat that paint is to run JS in <head>
+// before the browser commits the first frame, which is what `is:inline`
+// in <head> via Base's named slot gives us.
+//
+// Cached-user-and-fresh visitors fall through the gate as a no-op and
+// the rest of the page renders normally. Cached-user-but-naturally-
+// expired (now >= expiresAt) and anon are both redirected before paint.
+// The narrow "cache says user but session was deleted server-side"
+// case (admin suspension, role change, cross-device logout) still
+// hits the page; the data-fetch 401 hook in api.ts clears the cache
+// and the island-level data-fetch's own 401 branch redirects to /login.
+// That's the only remaining flash path and it's intentional.
+import Base from './Base.astro';
+
+interface Props {
+  title?: string;
+}
+const { title } = Astro.props;
+---
+
+<Base title={title}>
+  <script slot="head" is:inline>
+    (function () {
+      try {
+        var raw = localStorage.getItem('hereya_authnav_v1');
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (
+            parsed &&
+            parsed.state === 'user' &&
+            typeof parsed.expiresAt === 'number' &&
+            Date.now() / 1000 < parsed.expiresAt
+          ) {
+            return; // cached user, session still valid — pass through
+          }
+        }
+      } catch (e) {
+        // localStorage disabled / corrupted — fall through to redirect
+      }
+      var here = window.location.pathname + window.location.search;
+      window.location.replace('/login?next=' + encodeURIComponent(here));
+    })();
+  </script>
+  <slot />
+</Base>

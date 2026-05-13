@@ -1,9 +1,9 @@
 ---
-import Base from '../../layouts/Base.astro';
+import AdminBase from '../../layouts/AdminBase.astro';
 import { HyAdminTabs } from '../../components/AdminTabs';
 import { HyAdminUsers } from '../../components/AdminUsers';
 ---
-<Base title="Admin · Users">
+<AdminBase title="Admin · Users">
   <div class="space-y-1">
     <h1>Users</h1>
     <p class="text-sm text-neutral-500">
@@ -12,4 +12,4 @@ import { HyAdminUsers } from '../../components/AdminUsers';
   </div>
   <HyAdminTabs current="users" client:only="lit" />
   <HyAdminUsers client:only="lit" />
-</Base>
+</AdminBase>

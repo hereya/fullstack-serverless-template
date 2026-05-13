@@ -1,7 +1,12 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { api, ApiError } from '../lib/api';
-import { getNextPath, resolveLoginRedirect } from '../lib/redirectIfAuthed';
+import { bumpAuthSync, clearAuthCache } from '../lib/authState';
+import {
+  confirmLoginRedirect,
+  getNextPath,
+  loginRedirectFromCache,
+} from '../lib/redirectIfAuthed';
 import { DeferredLoadingController, skelFormCard } from '../lib/skeleton';
 
 // Map a thrown error to a user-facing string. Never surface raw status
@@ -69,12 +74,28 @@ export class HyLoginForm extends LitElement {
   private loadingDelay = new DeferredLoadingController(this);
 
   async firstUpdated() {
-    const r = await resolveLoginRedirect('/dashboard');
-    if ('redirect' in r) {
-      window.location.replace(r.redirect);
+    // 1) Synchronous cache check. If we already know the visitor is signed
+    //    in (state=user, cached session expiry still in the future), redirect
+    //    immediately — don't bother rendering the form.
+    const cached = loginRedirectFromCache('/dashboard');
+    if ('redirect' in cached) {
+      window.location.replace(cached.redirect);
       return;
     }
+
+    // 2) Render the form NOW. Optimistic-anon: assume the visitor is the
+    //    common case (anonymous) and paint the form on first frame rather
+    //    than waiting on /me. Lambda cold-start can make /me take 15+ s;
+    //    there's no reason to make every anon visitor wait that long for
+    //    a form that needs no data at all.
     this.ready = true;
+
+    // 3) Background confirmation. If /me eventually says the visitor IS
+    //    actually signed in (rare: stale tab session, just-cleared cache),
+    //    redirect them away. They saw the form briefly — acceptable
+    //    trade-off for the common-case speedup.
+    const confirmed = await confirmLoginRedirect('/dashboard');
+    if (confirmed) window.location.replace(confirmed.redirect);
   }
 
   // Core "ask the server for a code" — used by both the initial submit
@@ -142,22 +163,17 @@ export class HyLoginForm extends LitElement {
           code: this.code,
         }),
       });
-      // Auth state just changed server-side. Drop any stale AuthNav cache
-      // (which may have been an 'anon' snapshot from before this login)
-      // so the next page renders the right nav immediately. Without this,
-      // the post-login dashboard would show "Login" in the nav until the
-      // 5-min cache TTL expired.
-      try {
-        sessionStorage.removeItem('hereya_authnav_v1');
-        // Cross-tab signal: any sibling tabs showing the anon nav will
-        // catch this storage event and re-fetch /me. The `storage` event
-        // doesn't fire in the writing tab, so we don't loop with our
-        // own location.href navigation below.
-        localStorage.setItem('hereya_auth_sync_v1', String(Date.now()));
-      } catch {
-        // storage may be unavailable (private mode); ignore — the
-        // current tab still navigates fine; siblings recover on TTL.
-      }
+      // Auth state just changed server-side. Drop any stale cache (might
+      // have been an 'anon' snapshot from before this login) and signal
+      // other tabs to re-fetch — the next page lands with the right nav
+      // on first paint, no stale "Login" link visible.
+      //
+      // We don't write a fresh 'user' verdict here even though we just
+      // authenticated: that would require the /me-shape response from
+      // verify-otp (which currently returns nothing). Cheaper to clear
+      // and let AuthNav's mount on the next page populate it from /me.
+      clearAuthCache();
+      bumpAuthSync();
       window.location.href = getNextPath('/dashboard');
     } catch (err) {
       this.error = friendlyLoginError(err, 'Invalid code. Try again.');

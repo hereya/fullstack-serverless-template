@@ -255,9 +255,21 @@ async function buildVerifyOtpResponse(c: Context): Promise<Response> {
 auth.get('/me', authMiddleware, (c) => {
   const u = c.get('user');
   // `roleName` (not `role`) — the field name must match what
-  // apps/frontend/src/components/AuthNav.tsx expects so the admin link
+  // apps/frontend/src/components/AuthNav.ts expects so the admin link
   // appears for users whose roleName === 'admin'.
-  return c.json({ id: u.id, email: u.email, roleName: u.roleName });
+  //
+  // `sessionExpiresAt` (Unix seconds) is the DDB session row's TTL.
+  // The client caches it so it can decide synchronously whether the
+  // session has naturally expired without hitting the network — and so
+  // the /admin/* inline gate can redirect-before-paint for expired
+  // sessions. Sessions are NOT extended on use; this value is fixed
+  // at createSession time.
+  return c.json({
+    id: u.id,
+    email: u.email,
+    roleName: u.roleName,
+    sessionExpiresAt: c.get('sessionExpiresAt'),
+  });
 });
 
 auth.post('/logout', async (c) => {

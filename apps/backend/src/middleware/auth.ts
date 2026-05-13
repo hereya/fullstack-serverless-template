@@ -23,6 +23,11 @@ declare module 'hono' {
   interface ContextVariableMap {
     user: AuthUser;
     sessionId: string;
+    // Unix seconds — copied straight off the DDB session row's TTL. The
+    // /me handler exposes this to the client so it can cache a synchronous
+    // "has my session naturally expired?" verdict (and the client-side
+    // /admin/* inline gate uses it to redirect-before-paint).
+    sessionExpiresAt: number;
   }
 }
 
@@ -96,5 +101,6 @@ export async function authMiddleware(c: Context, next: Next) {
     roleName: session.roleName,
   });
   c.set('sessionId', sessionId);
+  c.set('sessionExpiresAt', session.ttl);
   await next();
 }

@@ -1,21 +1,13 @@
 // Shared fetch wrapper for /api/* calls. Cookies ride along (credentials:
 // 'include' so the dev-server proxy preserves the hereya_sid cookie).
 //
-// Side-effect on 401: nuke the AuthNav cache. Any auth-gated request that
-// comes back unauthenticated is a strong signal that the user's session is
-// gone server-side; we don't want the next page navigation to keep showing
-// Dashboard / Admin from a stale cache. The AuthNav island re-fetches on
-// its next mount and lands on the anon state cleanly.
-const AUTH_NAV_CACHE_KEY = 'hereya_authnav_v1';
-
-function clearAuthNavCache(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.removeItem(AUTH_NAV_CACHE_KEY);
-  } catch {
-    // sessionStorage may be unavailable (private mode); ignore
-  }
-}
+// Side-effect on 401: nuke the auth cache (lib/authState). Any auth-gated
+// request that comes back unauthenticated is a strong signal that the
+// user's session is gone server-side; we don't want the next page
+// navigation to keep showing Dashboard / Admin from a stale cache. The
+// AuthNav island re-fetches on its next mount and lands on the anon
+// state cleanly.
+import { clearAuthCache } from './authState';
 
 // Structured error type so callers can render friendly UX instead of
 // shoving raw "401 Unauthorized" / "500 Internal Server Error" strings
@@ -100,7 +92,7 @@ export async function api<T = unknown>(
     ...init,
   });
   if (res.status === 401) {
-    clearAuthNavCache();
+    clearAuthCache();
   }
   if (!res.ok) {
     // Best-effort parse of the error body. Servers usually return JSON
