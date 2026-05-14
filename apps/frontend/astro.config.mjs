@@ -13,8 +13,21 @@ import tailwindcss from '@tailwindcss/vite';
 // returns `this`) so global Tailwind utilities apply to their internal
 // markup. That keeps the conversion 1:1 with the prior React class
 // lists and avoids the usual web-components × Tailwind friction.
+// Canonical site URL — used by Astro for absolute URL building, and by
+// Base.astro to emit OG / Twitter Card meta tags with absolute `og:url`
+// and `og:image` values (required: link-preview scrapers don't resolve
+// relative URLs). Comes from `appUrl` injected by hereya/aws-app-lambda
+// at deploy time. Falls back to a dev placeholder so `npm run build`
+// works locally without env. Each project's deploy auto-supplies the
+// right value — no per-project edit needed.
+const siteUrl =
+  process.env.appUrl ??
+  process.env.PUBLIC_SITE_URL ??
+  'http://localhost:4321';
+
 export default defineConfig({
   output: 'static',
+  site: siteUrl,
   integrations: [lit()],
   vite: {
     plugins: [tailwindcss()],

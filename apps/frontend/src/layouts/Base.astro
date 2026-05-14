@@ -2,18 +2,72 @@
 import { HyAuthNav } from '../components/AuthNav';
 import '../styles/global.css';
 
+// Share-preview defaults. Each page can override via Astro.props.
+// `description` and `ogImage` flow into Open Graph + Twitter Card
+// meta tags below. The canonical site URL comes from astro.config.mjs
+// (`site:`, populated from `appUrl` at deploy time); we always build
+// absolute URLs here because link-preview scrapers don't resolve
+// relative paths.
+//
+// Customizing the OG image:
+//   - The PNG lives at apps/frontend/public/og-image.png. Re-render
+//     from scripts/og-card.html with Chrome headless. See
+//     docs/patterns/og-image.md.
+//   - Per-page override: pass `ogImage="/og-other.png"` as a prop.
 interface Props {
   title?: string;
+  description?: string;
+  ogImage?: string;
+  ogType?: 'website' | 'article';
+  locale?: string;
 }
-const { title = 'Hereya Fullstack Serverless' } = Astro.props;
+const {
+  title = 'Hereya Fullstack Serverless',
+  description = 'A minimal serverless template: static landing, registration form, admin page, and an MCP server so AI agents can drive the app.',
+  ogImage = '/og-image.png',
+  ogType = 'website',
+  locale = 'en_US',
+} = Astro.props;
+
+// Absolute URLs for OG / Twitter Card. Astro.site comes from the
+// `site:` config in astro.config.mjs.
+const siteOrigin = Astro.site?.toString().replace(/\/$/, '') ?? '';
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? 'http://localhost').toString();
+const ogImageUrl = ogImage.startsWith('http')
+  ? ogImage
+  : `${siteOrigin}${ogImage}`;
 ---
 <!doctype html>
-<html lang="en">
+<html lang={locale.split('_')[0]}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#1A1A2E" />
+    <link rel="canonical" href={canonicalUrl} />
+
+    {/* Open Graph — Facebook, LinkedIn, Slack, Discord, WhatsApp, etc. */}
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:site_name" content="Hereya" />
+    <meta property="og:locale" content={locale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content={title} />
+
+    {/* Twitter / X */}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+    <meta name="twitter:image:alt" content={title} />
+
     {/*
       Optional head-injection point. Layouts that wrap Base (e.g. AdminBase)
       use this to inject inline scripts that need to run BEFORE the body

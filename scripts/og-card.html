@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<!--
+  OG image source. Renders to a 1200x630 PNG via Chrome headless:
+
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --headless --disable-gpu --window-size=1200,630 \
+      --screenshot=apps/frontend/public/og-image.png \
+      "file://$(pwd)/scripts/og-card.html"
+
+  (Linux: substitute `google-chrome` or `chromium` for the path.)
+
+  Customize per project: edit the .title, .subtitle, .badge, .site
+  blocks below, then re-run the command. The PNG ships under
+  apps/frontend/public/og-image.png and is referenced as an absolute
+  URL in Base.astro via Astro.site.
+
+  See docs/patterns/og-image.md for the full workflow.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 1200px;
+      height: 630px;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #1A1A2E;
+      color: #fff;
+      overflow: hidden;
+    }
+    .card {
+      width: 1200px;
+      height: 630px;
+      position: relative;
+      padding: 64px 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(ellipse 800px 500px at 90% 110%, rgba(230, 57, 70, 0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 600px 400px at 10% -10%, rgba(244, 168, 138, 0.10) 0%, transparent 70%),
+        #1A1A2E;
+    }
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: #1A1A2E;
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', Georgia, serif;
+      color: #E63946;
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1;
+      padding-bottom: 4px;
+    }
+    .site {
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+    }
+    .body {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      max-width: 1040px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      align-self: flex-start;
+      background: rgba(230, 57, 70, 0.15);
+      color: #E63946;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #E63946;
+    }
+    .title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 700;
+      font-size: 76px;
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+    .title em {
+      font-style: italic;
+      font-weight: 600;
+      color: #E63946;
+    }
+    .subtitle {
+      font-size: 24px;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.78);
+      font-weight: 400;
+      max-width: 940px;
+    }
+    .subtitle strong { color: #fff; font-weight: 600; }
+    .bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 20px;
+      color: rgba(255, 255, 255, 0.65);
+    }
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .dot { color: rgba(255, 255, 255, 0.3); }
+    .cta-pill {
+      background: #E63946;
+      color: #fff;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="mark">h</div>
+      <div class="site">hereya · serverless template</div>
+    </div>
+    <div class="body">
+      <div class="badge">Static · Registration · Admin · MCP-ready</div>
+      <h1 class="title">Build your app <em>in your AI.</em></h1>
+      <p class="subtitle">
+        A minimal serverless starter: <strong>static landing</strong>, public registration form, admin
+        page, and an <strong>MCP server</strong> so AI agents can drive the app on your behalf.
+        Pattern-driven — add notes, attachments, billing when you need them.
+      </p>
+    </div>
+    <div class="bottom">
+      <div class="meta">
+        <span class="meta-item">Astro + Hono + Lambda</span>
+        <span class="dot">·</span>
+        <span class="meta-item">DynamoDB-first</span>
+        <span class="dot">·</span>
+        <span class="meta-item">hereya.ai</span>
+      </div>
+      <div class="cta-pill">Get started</div>
+    </div>
+  </div>
+</body>
+</html>
