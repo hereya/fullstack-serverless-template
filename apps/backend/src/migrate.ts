@@ -1,16 +1,17 @@
 // No-op migration Lambda. The hereya/aws-app-lambda CDK wires this
 // Lambda to a CloudFormation Custom Resource that fires on every stack
-// create/update. The minimal template has no Aurora schema to migrate
-// (Drizzle is gone — see CLAUDE.md's "Data layer rule of thumb"), so
+// create/update. The minimal template has no migrations to run, so
 // this handler returns success immediately and does no work.
 //
-// When a project adopts the notes pattern (docs/patterns/notes.md),
-// this file is replaced with the real migration runner:
+// When a feature needs to migrate or backfill data on deploy, see
+// [docs/patterns/migrations.md](../../../docs/patterns/migrations.md)
+// — that pattern wires a `MIGRATIONS` array + a `hasRun`/`markRun`
+// sentinel so each entry runs exactly once across the fleet. Replace
+// this handler with the body from that doc.
 //
-//   import { resolveSecrets } from './secrets.js';
-//   import { runMigrations } from './db/migrator.js';
-//   const ready = resolveSecrets();
-//   // ...await ready; await runMigrations(); ...
+// (Drizzle schema migrations are a different flow — see
+// [docs/patterns/notes.md](../../../docs/patterns/notes.md) which
+// re-wires this file to invoke `runMigrations()` from `db/migrator.ts`.)
 //
 // Keeping the entrypoint here (rather than deleting it from
 // esbuild.config.mjs) preserves compatibility with the

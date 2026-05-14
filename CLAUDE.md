@@ -72,6 +72,7 @@ without back-references to prior context.
 | [notes / CRUD app data](docs/patterns/notes.md) | The user wants a feature with real relational structure: posts, todos, a knowledge base, anything with joins. Adds Drizzle + Aurora. |
 | [file attachments](docs/patterns/attachments.md) | A feature needs user-uploaded files (images, PDFs). Uses the S3 package already in `hereya.yaml`. |
 | [richer registration form](docs/patterns/richer-registration.md) | The default email-only registration form needs name / company / event-specific fields. |
+| [one-shot data migrations](docs/patterns/migrations.md) | Need to backfill, transform, or move data between stores (Aurora→DDB, schema evolution within DDB). Wires the existing no-op `migrate.ts` Lambda to a list of idempotent migrations gated by a DDB sentinel. |
 
 If you need a pattern that's not listed, build it; when it works, write
 the pattern doc and add it to this table.
