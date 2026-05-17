@@ -47,8 +47,8 @@ export async function updateRolePermissionsHandler(opts: {
   const existing = await getRole(opts.roleName);
   if (!existing) throw new RoleNotFoundError(opts.roleName);
 
-  // Dedupe + canonicalize. The DDB writer takes a Set.
-  const next = new Set(opts.permissions);
+  // Dedupe + canonicalize. The DDB writer takes a readonly string[].
+  const next = Array.from(new Set(opts.permissions));
   await updateRolePermissions(opts.roleName, next);
 
   // Drop the per-Lambda cache entry so the new permissions are visible

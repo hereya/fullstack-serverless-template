@@ -61,19 +61,6 @@ vi.mock('../src/auth/users.js', () => ({
 
 vi.mock('../src/email/postmark.js', () => ({ sendOtp: vi.fn() }));
 
-// Shared mutable result for the subscriptions Drizzle chain (set per test).
-const subsResult: { rows: unknown[] } = { rows: [] };
-// Default the resilience wrapper to a passthrough so we don't need real AWS.
-vi.mock('../src/db/resilience.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../src/db/resilience.js')
-  >('../src/db/resilience.js');
-  return {
-    ...actual,
-    warmupCluster: vi.fn().mockResolvedValue(undefined),
-  };
-});
-
 // Mock the permissions module's runtime: admin role grants everything,
 // member grants nothing useful for /api/admin/*. Avoids needing a real
 // authRolesTable read in unit tests.
@@ -82,46 +69,21 @@ vi.mock('../src/auth/permissions.js', async () => {
     'users:list',
     'users:add',
     'users:suspend',
-    'newsletter:list',
-    'notes:read:own',
-    'notes:write:own',
   ]);
-  const MEMBER_ALLOW = new Set(['notes:read:own', 'notes:write:own']);
   return {
     PERMISSIONS: {
       USERS_LIST: 'users:list',
       USERS_ADD: 'users:add',
       USERS_SUSPEND: 'users:suspend',
-      NEWSLETTER_LIST: 'newsletter:list',
-      NOTES_READ_OWN: 'notes:read:own',
-      NOTES_WRITE_OWN: 'notes:write:own',
     },
     ALL_PERMISSIONS: [...ADMIN_ALLOW],
-    MEMBER_PERMISSIONS: [...MEMBER_ALLOW],
     roleHasPermission: async (roleName: string, perm: string) => {
       if (roleName === 'admin') return ADMIN_ALLOW.has(perm);
-      if (roleName === 'member') return MEMBER_ALLOW.has(perm);
       return false;
     },
     invalidateRoleCache: () => undefined,
   };
 });
-vi.mock('../src/db/client.js', () => ({
-  // Minimal chain stub for the subscriptions list route. User-management
-  // routes don't call getDb at all (they go through auth/users).
-  getDb: () => ({
-    select: () => ({
-      from: () => ({
-        orderBy: () => ({
-          limit: () => Promise.resolve(subsResult.rows),
-        }),
-      }),
-    }),
-  }),
-}));
-vi.mock('../src/db/schema.js', () => ({
-  users: {}, notes: {}, newsletterSubscriptions: {},
-}));
 
 import { app } from '../src/app.js';
 
@@ -317,37 +279,6 @@ describe('admin routes', () => {
     });
     expect(res.status).toBe(400);
     expect(usersSpies.setSuspended).not.toHaveBeenCalled();
-  });
-
-  it('GET /api/admin/subscriptions is auth-gated (401 without cookie)', async () => {
-    const res = await app.request('/api/admin/subscriptions');
-    expect(res.status).toBe(401);
-  });
-
-  it('GET /api/admin/subscriptions returns 403 for a member (no newsletter:list)', async () => {
-    asMember();
-    const res = await app.request('/api/admin/subscriptions', {
-      headers: { cookie: sessionCookie('sid') },
-    });
-    expect(res.status).toBe(403);
-  });
-
-  it('GET /api/admin/subscriptions returns the rows for an admin', async () => {
-    asAdmin();
-    const t = new Date('2025-01-15T10:00:00Z');
-    subsResult.rows = [
-      { id: 's1', email: 'alice@example.com', createdAt: t },
-      { id: 's2', email: 'bob@example.com', createdAt: t },
-    ];
-
-    const res = await app.request('/api/admin/subscriptions', {
-      headers: { cookie: sessionCookie('sid') },
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Array<Record<string, unknown>>;
-    expect(body).toHaveLength(2);
-    expect(body[0]?.email).toBe('alice@example.com');
-    expect(body[1]?.email).toBe('bob@example.com');
   });
 
   it('PATCH /api/admin/users/:id returns 404 for unknown user', async () => {

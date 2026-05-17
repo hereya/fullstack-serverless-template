@@ -12,6 +12,9 @@ import { countRegistrations } from '../../auth/registrationsStore.js';
 export interface StatsSummary {
   userCount: number;
   registrationCount: number;
+  // Index signature so this satisfies the MCP SDK's structuredContent
+  // contract (`Record<string, unknown>`).
+  [k: string]: unknown;
 }
 
 export async function statsSummaryHandler(): Promise<StatsSummary> {

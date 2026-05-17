@@ -31,6 +31,11 @@ export interface ToolResult {
   isError?: boolean;
   content: Array<{ type: 'text'; text: string }>;
   structuredContent?: Record<string, unknown>;
+  // Index signature lets ToolResult satisfy the MCP SDK's
+  // CallToolResult contract (which expects `[x: string]: unknown`).
+  // Without it, returning a ToolResult from a registered tool fails
+  // typecheck against `@modelcontextprotocol/sdk`.
+  [k: string]: unknown;
 }
 
 function errorResult(message: string): ToolResult {

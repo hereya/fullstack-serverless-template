@@ -20,7 +20,6 @@ vi.mock('../src/auth/roles.js', () => ({
 
 import {
   ALL_PERMISSIONS,
-  MEMBER_PERMISSIONS,
   PERMISSIONS,
   invalidateRoleCache,
   roleHasPermission,
@@ -33,19 +32,6 @@ describe('PERMISSIONS / ALL_PERMISSIONS', () => {
     for (const p of defined) {
       expect(ALL_PERMISSIONS).toContain(p);
     }
-  });
-
-  it('MEMBER_PERMISSIONS is a strict subset of ALL_PERMISSIONS', () => {
-    for (const p of MEMBER_PERMISSIONS) {
-      expect(ALL_PERMISSIONS).toContain(p);
-    }
-    expect(MEMBER_PERMISSIONS.length).toBeLessThan(ALL_PERMISSIONS.length);
-  });
-
-  it('MEMBER_PERMISSIONS does NOT grant any users:* permission', () => {
-    expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_LIST);
-    expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_ADD);
-    expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_SUSPEND);
   });
 });
 
@@ -67,7 +53,7 @@ describe('roleHasPermission', () => {
     });
 
     expect(await roleHasPermission('admin', PERMISSIONS.USERS_LIST)).toBe(true);
-    expect(await roleHasPermission('admin', PERMISSIONS.NOTES_READ_OWN)).toBe(true);
+    expect(await roleHasPermission('admin', PERMISSIONS.REGISTRATIONS_LIST)).toBe(true);
 
     // Second call is cache-served — only one DDB getRole call total.
     expect(rolesSpies.getRole).toHaveBeenCalledTimes(1);
@@ -75,46 +61,44 @@ describe('roleHasPermission', () => {
 
   it('returns false when the role lacks the permission', async () => {
     rolesSpies.getRole.mockResolvedValue({
-      roleName: 'member',
-      permissions: new Set<string>([
-        PERMISSIONS.NOTES_READ_OWN,
-        PERMISSIONS.NOTES_WRITE_OWN,
-      ]),
+      roleName: 'limited',
+      // Only one permission granted — anything else should be denied.
+      permissions: new Set<string>([PERMISSIONS.REGISTRATIONS_LIST]),
       createdAt: '2025-01-01',
     });
 
-    expect(await roleHasPermission('member', PERMISSIONS.NOTES_READ_OWN)).toBe(true);
-    expect(await roleHasPermission('member', PERMISSIONS.USERS_LIST)).toBe(false);
+    expect(await roleHasPermission('limited', PERMISSIONS.REGISTRATIONS_LIST)).toBe(true);
+    expect(await roleHasPermission('limited', PERMISSIONS.USERS_LIST)).toBe(false);
   });
 
   it('returns false for an unknown role and caches the negative result', async () => {
     rolesSpies.getRole.mockResolvedValue(null);
 
-    expect(await roleHasPermission('ghost', PERMISSIONS.NOTES_READ_OWN)).toBe(false);
     expect(await roleHasPermission('ghost', PERMISSIONS.USERS_LIST)).toBe(false);
+    expect(await roleHasPermission('ghost', PERMISSIONS.REGISTRATIONS_LIST)).toBe(false);
 
     expect(rolesSpies.getRole).toHaveBeenCalledTimes(1);
   });
 
   it('invalidateRoleCache forces a re-fetch on the next lookup', async () => {
     rolesSpies.getRole.mockResolvedValueOnce({
-      roleName: 'member',
-      permissions: new Set<string>([PERMISSIONS.NOTES_READ_OWN]),
+      roleName: 'limited',
+      permissions: new Set<string>([PERMISSIONS.REGISTRATIONS_LIST]),
       createdAt: '2025-01-01',
     });
-    expect(await roleHasPermission('member', PERMISSIONS.NOTES_READ_OWN)).toBe(true);
+    expect(await roleHasPermission('limited', PERMISSIONS.REGISTRATIONS_LIST)).toBe(true);
 
-    invalidateRoleCache('member');
+    invalidateRoleCache('limited');
 
     rolesSpies.getRole.mockResolvedValueOnce({
-      roleName: 'member',
+      roleName: 'limited',
       permissions: new Set<string>([
-        PERMISSIONS.NOTES_READ_OWN,
-        PERMISSIONS.NOTES_WRITE_OWN,
+        PERMISSIONS.REGISTRATIONS_LIST,
+        PERMISSIONS.REGISTRATIONS_DELETE,
       ]),
       createdAt: '2025-01-01',
     });
-    expect(await roleHasPermission('member', PERMISSIONS.NOTES_WRITE_OWN)).toBe(true);
+    expect(await roleHasPermission('limited', PERMISSIONS.REGISTRATIONS_DELETE)).toBe(true);
 
     expect(rolesSpies.getRole).toHaveBeenCalledTimes(2);
   });

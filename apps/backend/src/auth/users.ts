@@ -78,7 +78,9 @@ export async function findUserByEmail(email: string): Promise<UserRow | null> {
     }),
   );
   if (!r.Items || r.Items.length === 0) return null;
-  return toRow(r.Items[0]);
+  const item = r.Items[0];
+  if (!item) return null;
+  return toRow(item);
 }
 
 export async function bootstrapComplete(): Promise<boolean> {

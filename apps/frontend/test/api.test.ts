@@ -5,17 +5,17 @@ const CACHE_KEY = 'hereya_authnav_v1';
 
 describe('api fetch wrapper', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   it('clears the AuthNav cache when the API returns 401', async () => {
     // Simulate a previously-cached "user" state.
-    sessionStorage.setItem(
+    localStorage.setItem(
       CACHE_KEY,
       JSON.stringify({
         state: 'user',
@@ -23,7 +23,7 @@ describe('api fetch wrapper', () => {
         fetchedAt: Date.now(),
       }),
     );
-    expect(sessionStorage.getItem(CACHE_KEY)).not.toBeNull();
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
 
     vi.stubGlobal(
       'fetch',
@@ -39,11 +39,11 @@ describe('api fetch wrapper', () => {
 
     // After the 401 round-trip the AuthNav cache should be wiped so the
     // next mount lands on the anon state cleanly (no Dashboard flicker).
-    expect(sessionStorage.getItem(CACHE_KEY)).toBeNull();
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
   });
 
   it('does NOT clear the cache on 2xx responses', async () => {
-    sessionStorage.setItem(
+    localStorage.setItem(
       CACHE_KEY,
       JSON.stringify({
         state: 'user',
@@ -64,11 +64,11 @@ describe('api fetch wrapper', () => {
 
     const result = await api<{ ok: boolean }>('/api/notes');
     expect(result).toEqual({ ok: true });
-    expect(sessionStorage.getItem(CACHE_KEY)).not.toBeNull();
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
   });
 
   it('does NOT clear the cache on 4xx responses other than 401', async () => {
-    sessionStorage.setItem(
+    localStorage.setItem(
       CACHE_KEY,
       JSON.stringify({
         state: 'user',
@@ -90,7 +90,7 @@ describe('api fetch wrapper', () => {
     await expect(api('/api/admin/users')).rejects.toThrow(/403/);
     // A 403 means "the user IS signed in but isn't permitted" — the auth
     // cache is still valid, no reason to invalidate.
-    expect(sessionStorage.getItem(CACHE_KEY)).not.toBeNull();
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
   });
 
   it('always sends credentials: include + JSON content-type', async () => {

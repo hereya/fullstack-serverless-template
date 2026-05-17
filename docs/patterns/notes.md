@@ -34,11 +34,177 @@ apps/backend/src/db/
 └── schema.ts        ← table definitions
 ```
 
-The minimal template removed these because no Aurora-backed feature
-shipped with it. To resurrect, copy them from any prior commit on this
-template before the minimal refactor, OR write fresh ones — the Drizzle
-+ aws-data-api setup is documented in
-[`https://orm.drizzle.team/docs/get-started-postgresql#aws-data-api`](https://orm.drizzle.team/docs/get-started-postgresql#aws-data-api).
+The minimal template doesn't ship these — they're added by this
+pattern. Canonical sources below; drop them in verbatim.
+
+**`src/db/client.ts`**
+
+```ts
+import { drizzle } from 'drizzle-orm/aws-data-api/pg';
+import { RDSDataClient } from '@aws-sdk/client-rds-data';
+import { loadEnv } from '../env.js';
+import * as schema from './schema.js';
+
+let _rds: RDSDataClient | null = null;
+function rds(): RDSDataClient {
+  if (!_rds) _rds = new RDSDataClient({});
+  return _rds;
+}
+
+let _db: ReturnType<typeof makeDb> | null = null;
+
+function makeDb() {
+  const env = loadEnv();
+  return drizzle(rds(), {
+    database: env.databaseName,
+    resourceArn: env.clusterArn,
+    secretArn: env.secretArn,
+    schema,
+  });
+}
+
+export function getDb() {
+  if (!_db) _db = makeDb();
+  return _db;
+}
+
+export { schema };
+```
+
+**`src/db/resilience.ts`**
+
+```ts
+import { ExecuteStatementCommand, RDSDataClient } from '@aws-sdk/client-rds-data';
+import { loadEnv } from '../env.js';
+
+let _rds: RDSDataClient | null = null;
+function rds(): RDSDataClient {
+  if (!_rds) _rds = new RDSDataClient({});
+  return _rds;
+}
+
+const TRANSIENT_ERROR_NAMES = new Set([
+  'DatabaseResumingException',
+  'ServiceUnavailableException',
+  'ThrottlingException',
+]);
+
+const TRANSIENT_MESSAGE_PATTERNS = [
+  /resuming/i,
+  /cluster is being resumed/i,
+  /database is currently unavailable/i,
+  /communications link failure/i,
+];
+
+function singleIsTransient(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string };
+  if (e.name && TRANSIENT_ERROR_NAMES.has(e.name)) return true;
+  if (e.message) {
+    for (const re of TRANSIENT_MESSAGE_PATTERNS) {
+      if (re.test(e.message)) return true;
+    }
+  }
+  return false;
+}
+
+// Drizzle wraps the underlying SDK error in a `DrizzleQueryError` whose
+// `.cause` holds the real `DatabaseResumingException`. Walk the chain.
+export function isTransient(err: unknown): boolean {
+  let cur: unknown = err;
+  const seen = new Set<unknown>();
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    if (singleIsTransient(cur)) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+export type Warmup = () => Promise<void>;
+
+/**
+ * Run a Drizzle/Data API operation with one warmup-and-retry on
+ * transient errors. On the happy path, no warmup is called and no
+ * retry happens.
+ *
+ *   - On a transient error: invoke `warmup()` exactly once, then retry
+ *     `op` exactly once. If the retry also throws, propagate that
+ *     error.
+ *   - On a non-transient error: propagate immediately, no warmup.
+ *   - If `warmup` itself throws: propagate that error (no retry of op).
+ */
+export async function dbCall<T>(
+  op: () => Promise<T>,
+  _tag: string,
+  warmup?: Warmup,
+): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    if (!isTransient(err)) throw err;
+    if (warmup) await warmup();
+    return await op();
+  }
+}
+
+/**
+ * Cold-start warmup — kicks the cluster so subsequent queries don't
+ * pay the full resume tax. Top-level callers (handler.ts) wrap their
+ * own try/catch; `dbCall` itself rethrows warmup failures.
+ */
+export async function warmupCluster(): Promise<void> {
+  const env = loadEnv();
+  await rds().send(
+    new ExecuteStatementCommand({
+      resourceArn: env.clusterArn,
+      secretArn: env.secretArn,
+      database: env.databaseName,
+      sql: 'SELECT 1',
+    }),
+  );
+}
+```
+
+**`src/db/migrator.ts`**
+
+```ts
+import { migrate } from 'drizzle-orm/aws-data-api/pg/migrator';
+import { getDb } from './client.js';
+import { dbCall, warmupCluster } from './resilience.js';
+import path from 'node:path';
+import url from 'node:url';
+
+export async function runMigrations(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dir = typeof (globalThis as any).__dirname === 'string'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? (globalThis as any).__dirname
+    : path.dirname(url.fileURLToPath(import.meta.url));
+
+  // dist/db/migrator.js → ../drizzle/   (deployed Lambda)
+  // src/db/migrator.ts (dev) → ../../drizzle/
+  const candidates = [
+    path.join(dir, '..', 'drizzle'),
+    path.join(dir, '..', '..', 'drizzle'),
+  ];
+  let folder: string | undefined;
+  const fs = await import('node:fs');
+  for (const c of candidates) {
+    if (fs.existsSync(c)) { folder = c; break; }
+  }
+  if (!folder) throw new Error(`drizzle/ folder not found. Tried: ${candidates.join(', ')}`);
+
+  await dbCall(
+    () => migrate(getDb(), { migrationsFolder: folder! }),
+    'migrate',
+    warmupCluster,
+  );
+}
+```
+
+`schema.ts` is feature-specific (the notes example below). Build it
+fresh per pattern.
 
 Add deps to `apps/backend/package.json`:
 
@@ -226,7 +392,162 @@ warmupCluster().catch((err) => {
 
 And mirror it in `dev-server.ts`.
 
-### 9. Verify
+### 9. Tests
+
+The bare template doesn't ship these — the modules + permissions they
+exercise don't exist until you apply this pattern. Drop them in
+alongside the code.
+
+#### `apps/backend/tests/db-call.test.ts`
+
+Pins the `dbCall` + `isTransient` contract from `src/db/resilience.ts`:
+one warmup-and-retry on transient errors, propagate warmup failures,
+walk `.cause` chains (Drizzle wraps the SDK error).
+
+```ts
+import { describe, it, expect, vi } from 'vitest';
+import { dbCall, isTransient } from '../src/db/resilience.js';
+
+// Mirrors the shape AWS SDK + Drizzle hand us when Aurora is paused.
+function transientErr(): Error {
+  const err = new Error('DrizzleQueryError: Failed query');
+  (err as { cause?: unknown }).cause = Object.assign(
+    new Error('Aurora DB instance is resuming after being auto-paused.'),
+    { name: 'DatabaseResumingException' },
+  );
+  return err;
+}
+
+describe('isTransient', () => {
+  it('matches by error name', () => {
+    expect(isTransient(Object.assign(new Error('x'), { name: 'DatabaseResumingException' }))).toBe(true);
+    expect(isTransient(Object.assign(new Error('x'), { name: 'ThrottlingException' }))).toBe(true);
+  });
+
+  it('matches by message pattern', () => {
+    expect(isTransient(new Error('cluster is currently resuming'))).toBe(true);
+    expect(isTransient(new Error('totally unrelated'))).toBe(false);
+  });
+
+  it('walks .cause chains (Drizzle wraps the underlying SDK error)', () => {
+    expect(isTransient(transientErr())).toBe(true);
+  });
+});
+
+describe('dbCall', () => {
+  it('does not call warmup on the happy path', async () => {
+    const warmup = vi.fn().mockResolvedValue(undefined);
+    const fn = vi.fn().mockResolvedValue('ok');
+    const result = await dbCall(fn, 'happy', warmup);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(warmup).not.toHaveBeenCalled();
+  });
+
+  it('on transient error: warms cluster, retries the query once, returns success', async () => {
+    const warmup = vi.fn().mockResolvedValue(undefined);
+    let attempts = 0;
+    const fn = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) throw transientErr();
+      return 'ok';
+    });
+    const result = await dbCall(fn, 'retry-then-ok', warmup);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(warmup).toHaveBeenCalledTimes(1);
+  });
+
+  it('on transient error: gives up after one retry if it still fails', async () => {
+    const warmup = vi.fn().mockResolvedValue(undefined);
+    const fn = vi.fn(async () => { throw transientErr(); });
+    await expect(dbCall(fn, 'give-up', warmup)).rejects.toThrow(/DrizzleQueryError/);
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(warmup).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry a non-transient error', async () => {
+    const warmup = vi.fn().mockResolvedValue(undefined);
+    const fn = vi.fn(async () => { throw new Error('schema mismatch'); });
+    await expect(dbCall(fn, 'no-retry', warmup)).rejects.toThrow(/schema mismatch/);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(warmup).not.toHaveBeenCalled();
+  });
+
+  it('rethrows warmup failure if warmup itself fails', async () => {
+    const warmup = vi.fn().mockRejectedValue(new Error('warmup exhausted'));
+    const fn = vi.fn(async () => { throw transientErr(); });
+    await expect(dbCall(fn, 'warmup-fails', warmup)).rejects.toThrow(/warmup exhausted/);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(warmup).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+#### `apps/backend/tests/notes.test.ts` (integration stub)
+
+Disabled by default — flip the `describe.skip` once `hereya run` has
+populated the env vars and migrations have been applied to the dev DB.
+
+```ts
+import { describe, it, expect } from 'vitest';
+
+describe.skip('notes (integration)', () => {
+  it('creates and lists notes scoped to the current user', async () => {
+    // 1. POST /api/notes with a fresh title+body
+    // 2. GET /api/notes — expect the new id to appear
+    // 3. GET /api/notes as a different user — expect it NOT to appear
+    expect(true).toBe(true);
+  });
+});
+```
+
+For unit-style tests of the routes themselves (without a live cluster),
+mirror the mock scaffolding from
+[`docs/patterns/attachments.md`'s test section](attachments.md) —
+mock `getDb()` to return a Drizzle-shaped chain that consumes a
+queued result, so each test enqueues the rows it expects.
+
+#### Extend `apps/backend/tests/permissions.test.ts`
+
+The bare template's `permissions.test.ts` tests `roleHasPermission`
+with `USERS_LIST` / `REGISTRATIONS_LIST` only. Once this pattern adds
+`MEMBER_PERMISSIONS` + `NOTES_*` constants, append these to assert the
+new shape holds:
+
+```ts
+// add to the existing 'PERMISSIONS / ALL_PERMISSIONS' describe block:
+
+import { MEMBER_PERMISSIONS } from '../src/auth/permissions.js';
+
+it('MEMBER_PERMISSIONS is a strict subset of ALL_PERMISSIONS', () => {
+  for (const p of MEMBER_PERMISSIONS) {
+    expect(ALL_PERMISSIONS).toContain(p);
+  }
+  expect(MEMBER_PERMISSIONS.length).toBeLessThan(ALL_PERMISSIONS.length);
+});
+
+it('MEMBER_PERMISSIONS does NOT grant any users:* permission', () => {
+  expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_LIST);
+  expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_ADD);
+  expect(MEMBER_PERMISSIONS).not.toContain(PERMISSIONS.USERS_SUSPEND);
+});
+
+it('a member role grants the notes permissions but no users:* perms', async () => {
+  rolesSpies.getRole.mockResolvedValue({
+    roleName: 'member',
+    permissions: new Set<string>([
+      PERMISSIONS.NOTES_READ_OWN,
+      PERMISSIONS.NOTES_WRITE_OWN,
+    ]),
+    createdAt: '2025-01-01',
+  });
+  expect(await roleHasPermission('member', PERMISSIONS.NOTES_READ_OWN)).toBe(true);
+  expect(await roleHasPermission('member', PERMISSIONS.USERS_LIST)).toBe(false);
+});
+```
+
+### 10. Verify
 
 ```bash
 cd apps/backend
