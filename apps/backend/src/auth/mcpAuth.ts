@@ -33,17 +33,36 @@ function bearerToken(authHeader: string | undefined): string | null {
   return m ? m[1]! : null;
 }
 
+function publicBaseUrl(c: Context): string {
+  // Mirrors routes/wellKnown.ts:baseUrl(). The discovery URL we
+  // advertise in WWW-Authenticate MUST match the URL the MCP client
+  // used, or the client rejects the resource as mismatched.
+  //
+  // Behind CloudFront: trust appUrl (injected by hereya/aws-app-lambda
+  // >= 0.4.1). The ALL_VIEWER_EXCEPT_HOST_HEADER origin request policy
+  // strips Host AND any client-supplied X-Forwarded-Host, so this
+  // branch fires in prod and the X-Forwarded-* branch below is
+  // unreachable there.
+  if (process.env.appUrl) {
+    return new URL('/', process.env.appUrl).toString().replace(/\/$/, '');
+  }
+  // Local dev: Vite's proxy (xfwd: true) forwards X-Forwarded-Host /
+  // -Proto pointing at the frontend port (:4321), so we surface the
+  // URL the MCP client actually used instead of the backend's :4000.
+  const fwdHost = c.req.header('x-forwarded-host');
+  const fwdProto = c.req.header('x-forwarded-proto');
+  if (fwdHost) {
+    const proto = fwdProto ?? 'http';
+    return `${proto}://${fwdHost}`;
+  }
+  return new URL(c.req.url).origin;
+}
+
 function unauthorized(c: Context): Response {
   // Per RFC 9728 + MCP auth spec, surface a WWW-Authenticate header
   // pointing at our resource metadata so the client knows where to
-  // start the OAuth flow. Must be the PUBLIC URL — `c.req.url` returns
-  // the API Gateway origin behind CloudFront (the Host header is
-  // stripped by the ALL_VIEWER_EXCEPT_HOST_HEADER policy). The
-  // `appUrl` env var is injected by hereya/aws-app-lambda >= 0.4.1;
-  // the req.url fallback is for local dev only.
-  const base = process.env.appUrl
-    ? new URL('/', process.env.appUrl).toString().replace(/\/$/, '')
-    : new URL(c.req.url).origin;
+  // start the OAuth flow.
+  const base = publicBaseUrl(c);
   c.header(
     'WWW-Authenticate',
     `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,

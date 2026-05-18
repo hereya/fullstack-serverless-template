@@ -26,15 +26,24 @@ function baseUrl(req: Request): string {
   //
   // We can't derive the public URL from `req.url` behind CloudFront:
   // the ALL_VIEWER_EXCEPT_HOST_HEADER origin request policy strips
-  // the public Host header before forwarding, so `req.url` surfaces
-  // the API Gateway origin instead. If the discovery doc returned
-  // that URL, OAuth clients would send the browser to the origin —
-  // which has no /login handler and 404s.
-  //
-  // The `req.url` fallback is for local dev only (`npm run dev`),
-  // where the Lambda is hit directly without CloudFront in front.
+  // the public Host header (AND any client-supplied X-Forwarded-Host)
+  // before forwarding, so `req.url` surfaces the API Gateway origin
+  // instead. If the discovery doc returned that URL, OAuth clients
+  // would send the browser to the origin — which has no /login
+  // handler and 404s. The `appUrl` branch fires in production; the
+  // X-Forwarded-* branch below is unreachable there.
   if (process.env.appUrl) {
     return new URL('/', process.env.appUrl).toString().replace(/\/$/, '');
+  }
+  // Local dev: Vite's proxy (xfwd: true in astro.config.mjs) forwards
+  // X-Forwarded-Host / -Proto pointing at the frontend port (:4321),
+  // so the discovery doc advertises the URL the MCP client actually
+  // used instead of the backend's :4000 origin.
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto');
+  if (fwdHost) {
+    const proto = fwdProto ?? 'http';
+    return `${proto}://${fwdHost}`;
   }
   const u = new URL(req.url);
   return `${u.protocol}//${u.host}`;

@@ -249,8 +249,29 @@ forwards to the Hono backend on `:4000`.
 
 (Configured automatically when you started the dev server — see
 `apps/frontend/astro.config.mjs`. If you added the routes ad-hoc, add
-proxy entries for `/oauth`, `/mcp`, and `/.well-known` to that file.)
+proxy entries for `/oauth`, `/mcp`, and `/.well-known` to that file —
+each must include `xfwd: true` so the backend learns the public host.)
 
 For MCP-client integration testing locally, your MCP client connects
 to `http://localhost:4321/mcp` and the OAuth flow round-trips through
 the Astro dev server.
+
+**How discovery URLs are derived.** The `resource` field in
+`/.well-known/oauth-protected-resource` (and the `WWW-Authenticate`
+header on a 401 from `/mcp`) must match the URL the MCP client used,
+or the client rejects the resource as mismatched. The backend picks
+the URL like so:
+
+1. **Production**: `process.env.appUrl` is set by
+   `hereya/aws-app-lambda` and is the canonical public URL. Used
+   unconditionally. CloudFront strips `Host` and any client-supplied
+   `X-Forwarded-Host` via the `ALL_VIEWER_EXCEPT_HOST_HEADER` origin
+   request policy, so trusting forwarded headers here would be unsafe
+   anyway.
+2. **Local dev**: `appUrl` is unset. The Astro proxy forwards
+   `X-Forwarded-Host` / `X-Forwarded-Proto` (because `xfwd: true`),
+   so the backend reconstructs `http://localhost:4321` — the URL the
+   client actually hit — instead of its own `:4000` origin.
+
+If discovery URLs ever come out wrong, check `appUrl` (prod) or the
+proxy's `xfwd` flag (dev) first.

@@ -38,12 +38,19 @@ export default defineConfig({
         // mirrors what CloudFront serves in production. The MCP +
         // OAuth routes need their own entries because they live
         // outside /api/* (per the MCP auth spec).
-        '/api': { target: 'http://localhost:4000', changeOrigin: true },
-        '/mcp': { target: 'http://localhost:4000', changeOrigin: true },
-        '/oauth': { target: 'http://localhost:4000', changeOrigin: true },
+        //
+        // xfwd: true makes Vite forward X-Forwarded-Host / -Proto so
+        // the backend can reconstruct the public URL (frontend port,
+        // not :4000) when serving OAuth/MCP discovery docs. Without
+        // this the discovery docs advertise :4000 and MCP clients
+        // connected to :4321 reject the resource as mismatched.
+        '/api': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+        '/mcp': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+        '/oauth': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
         '/.well-known': {
           target: 'http://localhost:4000',
           changeOrigin: true,
+          xfwd: true,
         },
       },
     },
