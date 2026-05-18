@@ -175,16 +175,40 @@ import { dbCall, warmupCluster } from './resilience.js';
 import path from 'node:path';
 import url from 'node:url';
 
-export async function runMigrations(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dir = typeof (globalThis as any).__dirname === 'string'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (globalThis as any).__dirname
-    : path.dirname(url.fileURLToPath(import.meta.url));
+// `__dirname` is a module-local in CJS, NOT on globalThis — Node injects
+// it into the module wrapper's scope. esbuild's CJS bundle preserves it,
+// so reading it directly works in the Lambda. tsx's ESM runtime leaves
+// it undefined and instead provides `import.meta.url`; esbuild's CJS
+// output empties `import.meta`, so the try/catch keeps the fallback
+// chain alive when this file is bundled.
+declare const __dirname: string | undefined;
 
-  // dist/db/migrator.js → ../drizzle/   (deployed Lambda)
-  // src/db/migrator.ts (dev) → ../../drizzle/
+function moduleDir(): string {
+  if (typeof __dirname === 'string' && __dirname.length > 0) return __dirname;
+  try {
+    if (import.meta && typeof import.meta.url === 'string' && import.meta.url.length > 0) {
+      return path.dirname(url.fileURLToPath(import.meta.url));
+    }
+  } catch {
+    /* esbuild CJS empties import.meta; fall through */
+  }
+  if (process.env.LAMBDA_TASK_ROOT) return process.env.LAMBDA_TASK_ROOT;
+  return process.cwd();
+}
+
+export async function runMigrations(): Promise<void> {
+  const dir = moduleDir();
+
+  // Resolve drizzle/ from wherever this module ended up:
+  //   dist/migrate.js          → ./drizzle/      (Lambda — db/migrator.ts
+  //                                               is inlined into the
+  //                                               migrate.js bundle by
+  //                                               esbuild)
+  //   dist/db/migrator.js      → ../drizzle/     (if imported separately
+  //                                               from another bundle)
+  //   src/db/migrator.ts (dev) → ../../drizzle/  (tsx watch)
   const candidates = [
+    path.join(dir, 'drizzle'),
     path.join(dir, '..', 'drizzle'),
     path.join(dir, '..', '..', 'drizzle'),
   ];
@@ -202,6 +226,16 @@ export async function runMigrations(): Promise<void> {
   );
 }
 ```
+
+> **Why the `__dirname` dance?** esbuild builds with `format: 'cjs'`
+> (see `apps/backend/esbuild.config.mjs`). In a CJS bundle Node provides
+> `__dirname` as a module-local, NOT on `globalThis` — so
+> `(globalThis as any).__dirname` is always undefined. esbuild also can't
+> express ESM `import.meta` in CJS output, so `import.meta.url` is empty
+> at runtime and `fileURLToPath(undefined)` throws. Reading `__dirname`
+> directly (with the `declare const`) fixes both runtimes: the Lambda
+> bundle gets `/var/task`, tsx-dev falls through to `import.meta.url`,
+> and the `LAMBDA_TASK_ROOT` env var is a last-ditch safety net.
 
 `schema.ts` is feature-specific (the notes example below). Build it
 fresh per pattern.
