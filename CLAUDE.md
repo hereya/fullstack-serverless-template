@@ -57,6 +57,12 @@ pattern doc that matches the user's request.
    [notes pattern](docs/patterns/notes.md). Aurora auto-pauses when
    idle so user-facing paths that hit it pay a cold-start tax — only
    use it when the relational model is worth the latency.
+   **User-supplied secrets** (admin API keys, per-user OAuth tokens,
+   webhook signing secrets — anything where a user sets a value that
+   must be encrypted at rest and write-only from their perspective) →
+   the vault via `hereya/aws-secret-vault`, see the
+   [user-secrets pattern](docs/patterns/user-secrets.md). Do NOT
+   store sensitive values directly in the plain DDB or Aurora tables.
 
 ---
 
@@ -75,6 +81,7 @@ without back-references to prior context.
 | [one-shot data migrations](docs/patterns/migrations.md) | Need to backfill, transform, or move data between stores (Aurora→DDB, schema evolution within DDB). Wires the existing no-op `migrate.ts` Lambda to a list of idempotent migrations gated by a DDB sentinel. |
 | [newsletter signup](docs/patterns/newsletter.md) | Public "drop your email here" form that lands in Aurora, plus an admin list at `/api/admin/subscriptions`. Use when you want joinable subscriber history; skip if a Postmark broadcast list is enough. |
 | [OG / share-preview images](docs/patterns/og-image.md) | Customize the link-preview card that appears when the site is shared on Slack, Discord, X, LinkedIn, WhatsApp, etc. Edit `scripts/og-card.html`, regenerate `og-image.png` via Chrome headless. |
+| [user-supplied secrets](docs/patterns/user-secrets.md) | A feature needs to store user-supplied secrets — admin integration keys (Stripe, Slack, etc.), per-user OAuth tokens, webhook signing secrets. KMS-encrypted at rest. Write-only-from-user-perspective: plaintext can be set/rotated but never read back through HTTP routes or MCP tools — only server-side code decrypts. Adds `hereya/aws-secret-vault` (already in `hereya.yaml`). |
 
 If you need a pattern that's not listed, build it; when it works, write
 the pattern doc and add it to this table.

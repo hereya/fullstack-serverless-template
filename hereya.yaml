@@ -29,6 +29,13 @@ packages:
   hereya/aws-file-storage:
     version: 0.1.1
 
+  # KMS-encrypted vault for user-supplied secrets (admin integration
+  # keys, per-user OAuth tokens, webhook signing secrets). NOT used by
+  # the minimal template's code — kept here so the user-secrets pattern
+  # works out of the box. See docs/patterns/user-secrets.md.
+  hereya/aws-secret-vault:
+    version: 0.1.0
+
 devDeploy:
   hereya/dev-iam-user:
     version: 0.1.1
