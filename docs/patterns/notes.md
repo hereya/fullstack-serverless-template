@@ -93,6 +93,8 @@ const TRANSIENT_MESSAGE_PATTERNS = [
   /resuming/i,
   /cluster is being resumed/i,
   /database is currently unavailable/i,
+  /currently scaling/i,
+  /is paused/i,
   /communications link failure/i,
 ];
 
@@ -123,16 +125,74 @@ export function isTransient(err: unknown): boolean {
 
 export type Warmup = () => Promise<void>;
 
+// Warmup pacing. Cumulative max wait ≈ 0.8 + 1.6 + 3.2 + 5 × 7 ≈ 41 s.
+// Aurora Serverless v2 typically resumes within 15–30 s, so this gives
+// headroom without overrunning CloudFront's 60 s origin-response budget.
+const WARMUP_MAX_ATTEMPTS = 10;
+const WARMUP_BASE_MS = 800;
+const WARMUP_CAP_MS = 5000;
+
+// Post-warmup op retry pacing. Aurora occasionally throws one or two
+// more transients while connections re-establish; ~0.4 + 0.8 + 1.2 ≈
+// 2.4 s of additional budget absorbs that without masking real faults.
+const OP_RETRY_MAX = 3;
+const OP_RETRY_BASE_MS = 400;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Run a Drizzle/Data API operation with one warmup-and-retry on
- * transient errors. On the happy path, no warmup is called and no
- * retry happens.
+ * Cold-start warmup — polls the cluster with SELECT 1 + exponential
+ * backoff until it actually responds. Returns on the first success.
+ * Non-transient failures bail immediately so genuine misconfig still
+ * surfaces fast. Top-level callers (handler.ts) wrap their own
+ * try/catch; `dbCall` rethrows warmup failures.
+ */
+export async function warmupCluster(): Promise<void> {
+  const env = loadEnv();
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= WARMUP_MAX_ATTEMPTS; attempt++) {
+    try {
+      await rds().send(
+        new ExecuteStatementCommand({
+          resourceArn: env.clusterArn,
+          secretArn: env.secretArn,
+          database: env.databaseName,
+          sql: 'SELECT 1',
+        }),
+      );
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err)) throw err;
+      if (attempt >= WARMUP_MAX_ATTEMPTS) break;
+      const delay = Math.min(
+        WARMUP_CAP_MS,
+        WARMUP_BASE_MS * 2 ** (attempt - 1),
+      );
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[warmupCluster] attempt ${attempt}/${WARMUP_MAX_ATTEMPTS}: cluster still resuming, retrying in ${delay}ms`,
+      );
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Run a Drizzle / Data API operation with warmup-and-retry on transient
+ * errors.
  *
- *   - On a transient error: invoke `warmup()` exactly once, then retry
- *     `op` exactly once. If the retry also throws, propagate that
- *     error.
- *   - On a non-transient error: propagate immediately, no warmup.
- *   - If `warmup` itself throws: propagate that error (no retry of op).
+ *   - Happy path: one `op()` call, no warmup, no delay.
+ *   - First transient: invoke `warmup()` once, then retry `op` up to
+ *     `OP_RETRY_MAX` times with linear backoff, because Aurora sometimes
+ *     throws one or two more transients while connections settle even
+ *     after warmup succeeds.
+ *   - Non-transient error: propagate immediately, no warmup.
+ *   - If `warmup` itself throws: propagate that error (no further op
+ *     retries — warmupCluster already burned its full polling budget).
  */
 export async function dbCall<T>(
   op: () => Promise<T>,
@@ -143,26 +203,19 @@ export async function dbCall<T>(
     return await op();
   } catch (err) {
     if (!isTransient(err)) throw err;
-    if (warmup) await warmup();
-    return await op();
   }
-}
-
-/**
- * Cold-start warmup — kicks the cluster so subsequent queries don't
- * pay the full resume tax. Top-level callers (handler.ts) wrap their
- * own try/catch; `dbCall` itself rethrows warmup failures.
- */
-export async function warmupCluster(): Promise<void> {
-  const env = loadEnv();
-  await rds().send(
-    new ExecuteStatementCommand({
-      resourceArn: env.clusterArn,
-      secretArn: env.secretArn,
-      database: env.databaseName,
-      sql: 'SELECT 1',
-    }),
-  );
+  if (warmup) await warmup();
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= OP_RETRY_MAX; attempt++) {
+    try {
+      return await op();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err) || attempt >= OP_RETRY_MAX) throw err;
+      await sleep(OP_RETRY_BASE_MS * attempt);
+    }
+  }
+  throw lastErr;
 }
 ```
 
@@ -469,7 +522,7 @@ describe('isTransient', () => {
 });
 
 describe('dbCall', () => {
-  it('does not call warmup on the happy path', async () => {
+  it('happy path: one op call, no warmup, no delay', async () => {
     const warmup = vi.fn().mockResolvedValue(undefined);
     const fn = vi.fn().mockResolvedValue('ok');
     const result = await dbCall(fn, 'happy', warmup);
@@ -478,7 +531,7 @@ describe('dbCall', () => {
     expect(warmup).not.toHaveBeenCalled();
   });
 
-  it('on transient error: warms cluster, retries the query once, returns success', async () => {
+  it('on first transient: warms up, then retries op until it succeeds', async () => {
     const warmup = vi.fn().mockResolvedValue(undefined);
     let attempts = 0;
     const fn = vi.fn(async () => {
@@ -492,15 +545,30 @@ describe('dbCall', () => {
     expect(warmup).toHaveBeenCalledTimes(1);
   });
 
-  it('on transient error: gives up after one retry if it still fails', async () => {
+  it('keeps retrying op for late-settling transients after warmup', async () => {
+    const warmup = vi.fn().mockResolvedValue(undefined);
+    let attempts = 0;
+    const fn = vi.fn(async () => {
+      attempts += 1;
+      if (attempts < 4) throw transientErr();
+      return 'ok';
+    });
+    const result = await dbCall(fn, 'transients-then-ok', warmup);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(4);
+    expect(warmup).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
+  it('gives up after warmup + max op retries if Aurora never settles', async () => {
     const warmup = vi.fn().mockResolvedValue(undefined);
     const fn = vi.fn(async () => { throw transientErr(); });
-    await expect(dbCall(fn, 'give-up', warmup)).rejects.toThrow(/DrizzleQueryError/);
-    expect(fn).toHaveBeenCalledTimes(2);
+    await expect(dbCall(fn, 'gave-up', warmup)).rejects.toThrow(/DrizzleQueryError/);
+    // 1 initial + OP_RETRY_MAX (=3) post-warmup attempts = 4 total
+    expect(fn).toHaveBeenCalledTimes(4);
     expect(warmup).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
-  it('does NOT retry a non-transient error', async () => {
+  it('does NOT retry or warm up on a non-transient error', async () => {
     const warmup = vi.fn().mockResolvedValue(undefined);
     const fn = vi.fn(async () => { throw new Error('schema mismatch'); });
     await expect(dbCall(fn, 'no-retry', warmup)).rejects.toThrow(/schema mismatch/);
@@ -508,7 +576,7 @@ describe('dbCall', () => {
     expect(warmup).not.toHaveBeenCalled();
   });
 
-  it('rethrows warmup failure if warmup itself fails', async () => {
+  it('propagates warmup failure (Aurora never came back)', async () => {
     const warmup = vi.fn().mockRejectedValue(new Error('warmup exhausted'));
     const fn = vi.fn(async () => { throw transientErr(); });
     await expect(dbCall(fn, 'warmup-fails', warmup)).rejects.toThrow(/warmup exhausted/);
