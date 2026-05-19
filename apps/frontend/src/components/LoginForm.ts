@@ -1,5 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import {
+  browserSupportsWebAuthn,
+  startAuthentication,
+} from '@simplewebauthn/browser';
+import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 import { api, ApiError } from '../lib/api';
 import { bumpAuthSync, clearAuthCache } from '../lib/authState';
 import {
@@ -63,8 +68,13 @@ export class HyLoginForm extends LitElement {
   @state() private code = '';
   @state() private session = '';
   @state() private busy = false;
+  @state() private passkeyBusy = false;
   @state() private error: string | null = null;
   @state() private info: string | null = null;
+  // Hide the passkey button on browsers without WebAuthn (very old
+  // Safari/Firefox builds) — better than letting the user click a dead
+  // button. Defaults to false; flipped true in firstUpdated.
+  @state() private passkeySupported = false;
   // Honeypot input. Real users never fill this (aria-hidden + offscreen
   // + tabindex -1). Bots that scrape every input land their value here,
   // and the server then routes them down the fake-session path. Bound
@@ -89,6 +99,7 @@ export class HyLoginForm extends LitElement {
     //    there's no reason to make every anon visitor wait that long for
     //    a form that needs no data at all.
     this.ready = true;
+    this.passkeySupported = browserSupportsWebAuthn();
 
     // 3) Background confirmation. If /me eventually says the visitor IS
     //    actually signed in (rare: stale tab session, just-cleared cache),
@@ -96,6 +107,61 @@ export class HyLoginForm extends LitElement {
     //    trade-off for the common-case speedup.
     const confirmed = await confirmLoginRedirect('/admin/users');
     if (confirmed) window.location.replace(confirmed.redirect);
+  }
+
+  // After OTP- or passkey-success, both paths share this exact tail:
+  // invalidate the local auth cache, signal other tabs, and land the user
+  // at the right home route. Factored out so the two flows can't drift.
+  private finishSignIn(): void {
+    clearAuthCache();
+    bumpAuthSync();
+    window.location.href = getNextPath('/admin/users');
+  }
+
+  private async signInWithPasskey() {
+    this.error = null;
+    this.info = null;
+    this.passkeyBusy = true;
+    try {
+      // 1) Ask the server for options + a challengeId. No email body — we
+      //    rely on discoverable credentials so the OS picks the right
+      //    passkey on its own.
+      const { challengeId, options } = await api<{
+        challengeId: string;
+        options: PublicKeyCredentialRequestOptionsJSON;
+      }>('/api/webauthn/authenticate/options', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+      // 2) Let the OS produce an assertion. NotAllowedError = user
+      //    dismissed (or no eligible passkey) — fall through silently so
+      //    they can use email/OTP.
+      let response;
+      try {
+        response = await startAuthentication({ optionsJSON: options });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'NotAllowedError') {
+          return; // silent fallback to OTP form below
+        }
+        throw err;
+      }
+
+      // 3) Verify on the server and pick up the session cookie.
+      await api('/api/webauthn/authenticate/verify', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId, response }),
+      });
+
+      this.finishSignIn();
+    } catch (err) {
+      this.error = friendlyLoginError(
+        err,
+        "We couldn't sign you in with that passkey. Try again, or use the email form below.",
+      );
+    } finally {
+      this.passkeyBusy = false;
+    }
   }
 
   // Core "ask the server for a code" — used by both the initial submit
@@ -172,9 +238,7 @@ export class HyLoginForm extends LitElement {
       // authenticated: that would require the /me-shape response from
       // verify-otp (which currently returns nothing). Cheaper to clear
       // and let AuthNav's mount on the next page populate it from /me.
-      clearAuthCache();
-      bumpAuthSync();
-      window.location.href = getNextPath('/admin/users');
+      this.finishSignIn();
     } catch (err) {
       this.error = friendlyLoginError(err, 'Invalid code. Try again.');
     } finally {
@@ -215,14 +279,57 @@ export class HyLoginForm extends LitElement {
       <div class="card mx-auto max-w-sm p-6">
         ${this.step === 'email'
           ? html`
-              <form @submit=${this.requestOtp} class="space-y-4">
+              ${this.passkeySupported
+                ? html`
+                    <div class="space-y-3">
+                      <button
+                        type="button"
+                        ?disabled=${this.passkeyBusy || this.busy}
+                        @click=${this.signInWithPasskey}
+                        class="btn-primary flex w-full items-center justify-center gap-2"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class="h-5 w-5"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 11c0 7-5 9-5 9" />
+                          <path d="M16 22c0 0 5-3 5-10A9 9 0 0 0 7 4.6" />
+                          <path d="M3.1 9a9 9 0 0 1 4-4.4" />
+                          <path d="M4 22c1.4-2 2-4.5 2-7v-1a6 6 0 0 1 12 0v.6" />
+                          <path d="M14 13c.5 5-2 8-3.5 9.5" />
+                          <path d="M9 6.8a6 6 0 0 1 9 5.2" />
+                        </svg>
+                        <span>
+                          ${this.passkeyBusy
+                            ? 'Waking your passkey…'
+                            : 'Sign in with passkey'}
+                        </span>
+                      </button>
+                      <div class="flex items-center gap-3 text-xs text-neutral-500">
+                        <span class="h-px flex-1 bg-neutral-200"></span>
+                        <span>or sign in with email</span>
+                        <span class="h-px flex-1 bg-neutral-200"></span>
+                      </div>
+                    </div>
+                  `
+                : nothing}
+              <form
+                @submit=${this.requestOtp}
+                class="space-y-4 ${this.passkeySupported ? 'mt-4' : ''}"
+              >
                 ${this.renderHoneypot()}
                 <div>
                   <label for="email" class="label">Email</label>
                   <input
                     id="email"
                     type="email"
-                    autocomplete="email"
+                    autocomplete="email webauthn"
                     required
                     .value=${this.email}
                     @input=${(e: Event) => {
@@ -234,7 +341,7 @@ export class HyLoginForm extends LitElement {
                 </div>
                 <button
                   type="submit"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || this.passkeyBusy}
                   class="btn-primary w-full"
                 >
                   ${this.busy ? 'Sending…' : 'Send code'}

@@ -82,6 +82,7 @@ without back-references to prior context.
 | [newsletter signup](docs/patterns/newsletter.md) | Public "drop your email here" form that lands in Aurora, plus an admin list at `/api/admin/subscriptions`. Use when you want joinable subscriber history; skip if a Postmark broadcast list is enough. |
 | [OG / share-preview images](docs/patterns/og-image.md) | Customize the link-preview card that appears when the site is shared on Slack, Discord, X, LinkedIn, WhatsApp, etc. Edit `scripts/og-card.html`, regenerate `og-image.png` via Chrome headless. |
 | [user-supplied secrets](docs/patterns/user-secrets.md) | A feature needs to store user-supplied secrets — admin integration keys (Stripe, Slack, etc.), per-user OAuth tokens, webhook signing secrets. KMS-encrypted at rest. Write-only-from-user-perspective: plaintext can be set/rotated but never read back through HTTP routes or MCP tools — only server-side code decrypts. Adds `hereya/aws-secret-vault` (already in `hereya.yaml`). |
+| [WebAuthn / passkeys](docs/patterns/webauthn.md) | Users want one-click sign-in alongside email OTP. Reuses the existing `aws-ddb-app-state` table (two new `WACRED#` / `WACHAL#` discriminators on the shared OAuth-state table) — no new infra. Passkey sessions use `refreshToken: null` and skip the Cognito refresh in `authMiddleware`. |
 
 If you need a pattern that's not listed, build it; when it works, write
 the pattern doc and add it to this table.

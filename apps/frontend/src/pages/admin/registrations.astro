@@ -2,6 +2,7 @@
 import AdminBase from '../../layouts/AdminBase.astro';
 import { HyAdminTabs } from '../../components/AdminTabs';
 import { HyAdminRegistrations } from '../../components/AdminRegistrations';
+import { HyPasskeyBanner } from '../../components/PasskeyBanner';
 ---
 <AdminBase title="Admin · Registrations">
   <div class="space-y-1">
@@ -11,5 +12,6 @@ import { HyAdminRegistrations } from '../../components/AdminRegistrations';
     </p>
   </div>
   <HyAdminTabs current="registrations" client:only="lit" />
+  <HyPasskeyBanner client:only="lit" />
   <HyAdminRegistrations client:only="lit" />
 </AdminBase>

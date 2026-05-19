@@ -38,7 +38,10 @@ export interface Session {
   userId: string;
   email: string;
   roleName: string;
-  refreshToken: string;
+  // null on passkey-initiated sessions (no Cognito round-trip happened).
+  // authMiddleware skips the access-token refresh on null and serves the
+  // identity directly from the session-row snapshot.
+  refreshToken: string | null;
   // Unix seconds — when the DDB TTL will reap this row. Fixed at
   // createSession time (now + 30 days); not extended on use. The client
   // caches this so it can decide "the session has naturally expired"
@@ -56,22 +59,26 @@ export async function createSession(
   userId: string,
   email: string,
   roleName: string,
-  refreshToken: string,
+  refreshToken: string | null,
 ): Promise<string> {
   const sessionId = crypto.randomUUID();
   const now = Math.floor(Date.now() / 1000);
+  // Omit `refreshToken` entirely when null instead of writing the literal
+  // NULL type — the userId-index GSI doesn't care, but staying out of the
+  // attribute keeps reads symmetric with what we wrote.
+  const item: Record<string, unknown> = {
+    sessionId,
+    userId,
+    email,
+    roleName,
+    createdAt: new Date().toISOString(),
+    ttl: now + SESSION_TTL_SECONDS,
+  };
+  if (refreshToken) item.refreshToken = refreshToken;
   await doc().send(
     new PutCommand({
       TableName: tableName(),
-      Item: {
-        sessionId,
-        userId,
-        email,
-        roleName,
-        refreshToken,
-        createdAt: new Date().toISOString(),
-        ttl: now + SESSION_TTL_SECONDS,
-      },
+      Item: item,
     }),
   );
   return sessionId;
@@ -85,7 +92,7 @@ export async function getSession(sessionId: string): Promise<Session | null> {
     userId: r.Item.userId,
     email: r.Item.email,
     roleName: (r.Item.roleName as string) ?? 'member',
-    refreshToken: r.Item.refreshToken,
+    refreshToken: (r.Item.refreshToken as string | undefined) ?? null,
     // `ttl` is required on new rows but old rows written before this
     // field existed won't have it — fall back to 0 (which the client
     // interprets as "already expired" → treat as anon → re-auth).

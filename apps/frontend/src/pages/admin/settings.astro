@@ -1,17 +1,17 @@
 ---
 import AdminBase from '../../layouts/AdminBase.astro';
 import { HyAdminTabs } from '../../components/AdminTabs';
-import { HyAdminIntegrations } from '../../components/AdminIntegrations';
+import { HyPasskeys } from '../../components/Passkeys';
 import { HyPasskeyBanner } from '../../components/PasskeyBanner';
 ---
-<AdminBase title="Admin · Integrations">
+<AdminBase title="Admin · Settings">
   <div class="space-y-1">
-    <h1>MCP integrations</h1>
+    <h1>Settings</h1>
     <p class="text-sm text-neutral-500">
-      Admin · manage AI agents connected via MCP
+      Your account · sign-in methods and devices
     </p>
   </div>
-  <HyAdminTabs current="integrations" client:only="lit" />
+  <HyAdminTabs current="settings" client:only="lit" />
   <HyPasskeyBanner client:only="lit" />
-  <HyAdminIntegrations client:only="lit" />
+  <HyPasskeys client:only="lit" />
 </AdminBase>

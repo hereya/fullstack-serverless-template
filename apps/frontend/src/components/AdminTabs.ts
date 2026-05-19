@@ -10,12 +10,13 @@ import { customElement, property } from 'lit/decorators.js';
 // inline <head> script that redirects anon visitors BEFORE any body
 // paint, so the tabs can render unconditionally — we only reach here as
 // a cached-user visitor with a session that hasn't naturally expired.
-type Tab = 'users' | 'registrations' | 'integrations';
+type Tab = 'users' | 'registrations' | 'integrations' | 'settings';
 
 const tabs: Array<{ key: Tab; href: string; label: string }> = [
   { key: 'users', href: '/admin/users', label: 'Users' },
   { key: 'registrations', href: '/admin/registrations', label: 'Registrations' },
   { key: 'integrations', href: '/admin/integrations', label: 'Integrations' },
+  { key: 'settings', href: '/admin/settings', label: 'Settings' },
 ];
 
 @customElement('hy-admin-tabs')

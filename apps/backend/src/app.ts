@@ -6,6 +6,7 @@ import { mcp } from './routes/mcp.js';
 import { oauth } from './routes/oauth.js';
 import { publicRoutes } from './routes/public.js';
 import { registration } from './routes/registration.js';
+import { webauthn } from './routes/webauthn.js';
 import { wellKnown } from './routes/wellKnown.js';
 
 export const app = new Hono();
@@ -19,6 +20,7 @@ if (process.env.NODE_ENV !== 'test') {
 app.route('/api', publicRoutes);
 app.route('/api/auth', auth);
 app.route('/api/registration', registration); // public (no auth)
+app.route('/api/webauthn', webauthn);         // mixed: register/* + credentials* authed, authenticate/* anonymous
 app.route('/api/admin', admin);                // auth-gated + per-route requirePermission
 
 // MCP integration. These three trees live OUTSIDE /api/* because the

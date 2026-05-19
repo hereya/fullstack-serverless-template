@@ -71,27 +71,36 @@ export async function authMiddleware(c: Context, next: Next) {
 
   // Refresh the Cognito access token if missing or expired. Failures here
   // mean the refresh-token is dead — clear everything and 401.
-  let cached = accessTokenCache.get(sessionId);
-  if (!cached || isExpired(cached)) {
-    try {
-      const { accessToken, expiresIn } = await refreshTokens(
-        session.refreshToken,
-      );
-      cached = { accessToken, expiresAt: Date.now() + expiresIn * 1000 };
-      accessTokenCache.set(sessionId, cached);
-    } catch {
-      await clear(c, sessionId);
-      return c.json({ error: 'unauthenticated' }, 401);
-    }
-  }
-
-  // Pull cognito sub out of the access token for downstream code that wants it.
+  //
+  // Passkey-initiated sessions have no Cognito refresh token (session.
+  // refreshToken === null). They skip the refresh entirely and serve the
+  // identity straight from the session-row snapshot; `sub` stays null.
+  // Downstream code that wants the canonical user id should read
+  // `c.get('user').id` (= session.userId), not `sub`. The only consumers
+  // that need `sub` are the OAuth/MCP token surfaces, which use bearer
+  // tokens directly (not session cookies) and don't go through this
+  // middleware.
   let sub: string | null = null;
-  try {
-    const decoded = jwtDecode<{ sub: string }>(cached.accessToken);
-    if (decoded.sub) sub = decoded.sub;
-  } catch {
-    // fall through with null
+  if (session.refreshToken) {
+    let cached = accessTokenCache.get(sessionId);
+    if (!cached || isExpired(cached)) {
+      try {
+        const { accessToken, expiresIn } = await refreshTokens(
+          session.refreshToken,
+        );
+        cached = { accessToken, expiresAt: Date.now() + expiresIn * 1000 };
+        accessTokenCache.set(sessionId, cached);
+      } catch {
+        await clear(c, sessionId);
+        return c.json({ error: 'unauthenticated' }, 401);
+      }
+    }
+    try {
+      const decoded = jwtDecode<{ sub: string }>(cached.accessToken);
+      if (decoded.sub) sub = decoded.sub;
+    } catch {
+      // fall through with null
+    }
   }
 
   c.set('user', {

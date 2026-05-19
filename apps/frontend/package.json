@@ -17,6 +17,7 @@
     "@lit-labs/ssr": "^3.2.2",
     "@lit-labs/ssr-client": "^1.1.7",
     "@lit-labs/ssr-dom-shim": "^1.2.0",
+    "@simplewebauthn/browser": "^13.0.0",
     "@tailwindcss/vite": "^4.3.0",
     "@webcomponents/template-shadowroot": "^0.2.1",
     "astro": "^6.3.1",
