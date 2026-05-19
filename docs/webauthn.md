@@ -1,21 +1,34 @@
-# Pattern: WebAuthn (passkeys) alongside email OTP
+# WebAuthn (passkeys) — bare-template feature
 
-Use this when users want one-click sign-in. Passkey auth runs as a
-**second** sign-in method alongside the existing email/OTP flow — OTP
-stays in place as the fallback and the first-user-bootstrap path. A
-user first signs in via OTP, registers a passkey from Settings, then
-uses the passkey button on the login page from then on.
+Passkey sign-in ships in the **bare template**, alongside email/OTP.
+This is not an opt-in pattern: every project scaffolded from this
+template starts with `/api/webauthn/*` routes mounted, a passkey
+button on `/login`, a Passkeys card at `/admin/settings`, and an
+invite banner on every admin page until the user registers their
+first device. OTP stays in place as the fallback and the
+first-user-bootstrap path.
 
-## What this changes
+Read this doc when you need to:
+- Understand how passkey sessions coexist with Cognito-issued OTP
+  sessions (the nullable `refreshToken` story).
+- Customize the friendly name shown in the OS prompt (`RP_NAME`).
+- Disable passkey sign-in for a specific project.
+- Apply the changes to an older project that was scaffolded before
+  c0dad16 — every file below has the full content / patch.
+- Debug something subtle (response padding, counter regression,
+  Lit/SVG namespace bug, DDB `byUser-index` type-mismatch).
 
-- Two new public DDB row kinds (`WACRED#` durable credentials, `WACHAL#`
-  short-lived challenges) on the **existing** `aws-ddb-app-state` table.
-  No new package, no new infra.
-- Backend: `/api/webauthn/*` routes + a store module + small edits to
-  `auth/sessions.ts` and `middleware/auth.ts`.
-- Frontend: passkey button on `/login`, a Passkeys card on a new
-  `/admin/settings` page, an invite banner on every admin page until
-  the user registers their first device.
+## What's wired up
+
+- Two row kinds (`WACRED#` durable credentials, `WACHAL#` short-lived
+  challenges) on the **existing** `aws-ddb-app-state` table. No new
+  package, no new infra.
+- Backend: `/api/webauthn/*` routes, an `auth/webauthnStore.ts`
+  module, and refreshToken-nullable handling in `auth/sessions.ts` +
+  `middleware/auth.ts`.
+- Frontend: passkey button on `/login`, a `<hy-passkeys>` Lit card on
+  `/admin/settings`, a `<hy-passkey-banner>` invite on every admin
+  page until the user registers their first device.
 
 ## Critical security/UX properties
 
@@ -70,9 +83,14 @@ The store's `createChallenge` does this already — don't shortcut it.
 }
 ```
 
-## Backend
+## Backend file-by-file
 
-### 1. Sessions — make `refreshToken` nullable
+Each subsection below describes one piece of the wiring. When applying
+this to an **older project** scaffolded before c0dad16, follow the
+sections in order — every file either has its full content or a
+precise patch.
+
+### Sessions — `refreshToken` is nullable
 
 In `apps/backend/src/auth/sessions.ts`:
 
@@ -121,7 +139,7 @@ And in `getSession`, hydrate `refreshToken` as `string | null`:
 refreshToken: (r.Item.refreshToken as string | undefined) ?? null,
 ```
 
-### 2. Middleware — skip refresh on passkey sessions
+### Middleware — passkey sessions skip the Cognito refresh
 
 In `apps/backend/src/middleware/auth.ts`, wrap the existing
 refresh/decode block in `if (session.refreshToken) { … }`. Passkey
@@ -157,7 +175,7 @@ Downstream code that wants the canonical user id should read
 that need `sub` are the OAuth/MCP token surfaces — those use bearer
 tokens directly and don't go through this middleware.
 
-### 3. WebAuthn store
+### WebAuthn store (`auth/webauthnStore.ts`)
 
 Add `apps/backend/src/auth/webauthnStore.ts` — see the file shipped
 with this template for the canonical implementation. It exposes:
@@ -182,7 +200,7 @@ Three load-bearing details to keep:
    the GSI doesn't return any OAuth `TOKEN#` rows that also have
    `userId` set.
 
-### 4. Routes
+### Routes (`routes/webauthn.ts`)
 
 Add `apps/backend/src/routes/webauthn.ts` — see the shipped file. The
 endpoint layout:
@@ -211,7 +229,7 @@ Three details to keep:
   user.roleName, null)` — the null refreshToken is the load-bearing
   flag for the middleware change above.
 
-### 5. Mount in `app.ts`
+### Mount in `app.ts`
 
 ```ts
 import { webauthn } from './routes/webauthn.js';
@@ -219,7 +237,7 @@ import { webauthn } from './routes/webauthn.js';
 app.route('/api/webauthn', webauthn);  // mixed: register/* + credentials* authed, authenticate/* anonymous
 ```
 
-### 6. Tests
+### Tests (`tests/webauthn.test.ts`)
 
 Add `apps/backend/tests/webauthn.test.ts` — mirrors `auth.test.ts`'s
 mocking pattern. Mocks `@simplewebauthn/server` so tests don't
@@ -240,9 +258,9 @@ construct real cryptographic payloads. Covers:
 
 See the shipped test file for the exact mock shape — copy verbatim.
 
-## Frontend
+## Frontend file-by-file
 
-### 7. Shared library
+### Shared library (`lib/passkey.ts`)
 
 Add `apps/frontend/src/lib/passkey.ts`. Three exports:
 
@@ -260,7 +278,7 @@ export const PASSKEY_ICON_PATHS: readonly string[];  // shared fingerprint icon
 Centralizing the registration roundtrip means the Settings card and
 the post-login banner can't drift on field names or order.
 
-### 8. Settings card — `<hy-passkeys>`
+### Settings card — `<hy-passkeys>`
 
 Add `apps/frontend/src/components/Passkeys.ts`. Light-DOM Lit element
 that:
@@ -269,7 +287,7 @@ that:
 - "Register this device" form with auto-detected label
 - Per-row Remove button
 
-### 9. Invite banner — `<hy-passkey-banner>`
+### Invite banner — `<hy-passkey-banner>`
 
 Add `apps/frontend/src/components/PasskeyBanner.ts`. Same registration
 flow as the settings card, but only renders when:
@@ -294,7 +312,7 @@ ${PASSKEY_ICON_PATHS.map((d) => svg`<path d=${d}></path>`)}
 This is documented inline in the shipped `PasskeyBanner.ts` — preserve
 the comment.
 
-### 10. Login page — passkey button + finishSignIn helper
+### Login page — passkey button + `finishSignIn` helper
 
 Edit `apps/frontend/src/components/LoginForm.ts`:
 
@@ -332,7 +350,7 @@ Edit `apps/frontend/src/components/LoginForm.ts`:
    `"email webauthn"` so the OS can suggest a passkey from the email
    field directly.
 
-### 11. Settings page + admin tab
+### Settings page + admin tab
 
 Add the `Settings` tab to `apps/frontend/src/components/AdminTabs.ts`:
 
@@ -367,7 +385,7 @@ import { HyPasskeyBanner } from '../../components/PasskeyBanner';
 </AdminBase>
 ```
 
-### 12. Banner on every admin page
+### Banner on every admin page
 
 Add `<HyPasskeyBanner client:only="lit" />` between `<HyAdminTabs>`
 and the page's main island in each of:
@@ -376,9 +394,76 @@ and the page's main island in each of:
 - `apps/frontend/src/pages/admin/registrations.astro`
 - `apps/frontend/src/pages/admin/integrations.astro`
 
-(Settings already has it from step 11.) The banner self-hides on
-browsers without WebAuthn, when the user has at least one passkey, or
-when dismissed.
+(Settings already has it.) The banner self-hides on browsers without
+WebAuthn, when the user has at least one passkey, or when dismissed.
+
+## Customizing
+
+### Rename the friendly app name shown in the OS prompt
+
+`apps/backend/src/routes/webauthn.ts` declares:
+
+```ts
+const RP_NAME = 'hereya-app';
+```
+
+This string is what users see in the system passkey dialog ("Save a
+passkey for hereya-app?"). Rename it to your product name early —
+existing passkeys keep working when you change it, but new ones
+register under the new label.
+
+It does NOT need to match `rpID`. `rpID` is the hostname
+(`app.example.com`) and is what binds the credential to a domain;
+`RP_NAME` is purely cosmetic.
+
+### Disable passkey sign-in for one environment
+
+The cleanest knob is the **frontend**: in
+`apps/frontend/src/components/LoginForm.ts`, the passkey button is
+gated by `this.passkeySupported`. Force it false to hide the button
+without removing any backend code:
+
+```ts
+this.passkeySupported = false; // disabled for this build
+```
+
+Don't remove the `/api/webauthn/*` routes from `app.ts` — users who
+already registered a passkey rely on `GET /credentials` to list and
+revoke them. Hiding the login button + the `<hy-passkeys>` card is
+the right scope.
+
+### Remove passkey support entirely from a project
+
+If a project doesn't want passkeys at all, the safe path is:
+
+1. Unmount the routes: drop `app.route('/api/webauthn', webauthn)`
+   and the import from `apps/backend/src/app.ts`.
+2. Delete `apps/backend/src/{auth/webauthnStore,routes/webauthn}.ts`
+   and `apps/backend/tests/webauthn.test.ts`.
+3. Delete the frontend files: `lib/passkey.ts`,
+   `components/{Passkeys,PasskeyBanner}.ts`,
+   `pages/admin/settings.astro`.
+4. Strip passkey UI from `LoginForm.ts` (the button + finishSignIn
+   helper is fine to keep, but unused), drop the Settings tab from
+   `AdminTabs.ts`, drop `<HyPasskeyBanner>` from the three admin
+   pages.
+5. Optionally revert the nullable-`refreshToken` change in
+   `auth/sessions.ts` + `middleware/auth.ts` — it's harmless to keep,
+   but if you want strict invariants back, no Cognito-less sessions
+   will ever be created without the routes.
+6. Drop the two `@simplewebauthn/*` deps from the workspace
+   package.jsons.
+
+Don't drop the `WACRED#` / `WACHAL#` rows from the DDB table by hand
+— they auto-prune via TTL (challenges) or sit dormant (credentials,
+which never get listed once the routes are gone).
+
+### Customize the device-label sniffer
+
+`apps/frontend/src/lib/passkey.ts:defaultDeviceLabel()` does a basic
+UA sniff (iPhone / Mac / Android / Windows). For most apps that's
+enough; the user can override the suggested label in the
+`<hy-passkeys>` form before clicking Register.
 
 ## Verification
 
