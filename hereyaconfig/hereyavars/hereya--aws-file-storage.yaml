@@ -1,14 +1,19 @@
-# Per-app prefix on the workspace's shared S3 bucket. The workspace is
-# expected to expose `bucketArn` + `bucketName` (typically via a
-# workspace-level hereya/aws-s3-shared); this package layers a scoped
-# IAM policy on top and emits `s3Prefix`.
+# hereya/aws-file-storage parameters.
 #
-# The package defaults `prefix` to the (sanitized) stack name — fine
-# for prod, but the hereya CDK harness uses an opaque p-<guid> stack
-# name, which gives ugly keys like:
-#     s3://<workspace-bucket>/p-09405953-…/notes/abc/…
+# The package's S3 prefix is fixed by the stack name (collision-free
+# across hereya projects + workspaces) — there's no `prefix` knob to
+# set.
 #
-# Pin a friendly prefix so the object layout is human-readable in the
-# S3 console. The backend reads `process.env.s3Prefix` and prepends it
-# to every key (see apps/backend/src/storage/s3.ts).
-prefix: "fullstack-app"
+# `deleteObjects` (optional): array of S3 lifecycle rules to install
+# under named sub-prefixes. Each entry creates one rule that expires
+# objects under `<assigned-prefix>/<subPrefix>/` after `after` days.
+# Rules belonging to other tenants of the same shared bucket are
+# preserved (rule IDs are namespaced by stack name).
+#
+# Example: auto-expire ephemeral email attachments after 7 days.
+#
+# deleteObjects:
+#   - after: 7
+#     subPrefix: attachments
+#   - after: 30
+#     subPrefix: reports

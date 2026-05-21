@@ -26,8 +26,13 @@ packages:
   # Per-app prefix on the workspace-shared S3 bucket. NOT used by the
   # minimal template's code — kept here so the attachments pattern
   # works out of the box. See docs/patterns/attachments.md.
+  #
+  # Optional `deleteObjects` lifecycle rules are configured in
+  # hereyaconfig/hereyavars/hereya--aws-file-storage.yaml. Add one
+  # entry per sub-prefix you want auto-expired (e.g. ephemeral
+  # download/upload directories).
   hereya/aws-file-storage:
-    version: 0.1.1
+    version: 0.2.1
 
   # KMS-encrypted vault for user-supplied secrets (admin integration
   # keys, per-user OAuth tokens, webhook signing secrets). NOT used by
