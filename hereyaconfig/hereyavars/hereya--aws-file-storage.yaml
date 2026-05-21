@@ -4,16 +4,16 @@
 # across hereya projects + workspaces) — there's no `prefix` knob to
 # set.
 #
-# `deleteObjects` (optional): array of S3 lifecycle rules to install
-# under named sub-prefixes. Each entry creates one rule that expires
-# objects under `<assigned-prefix>/<subPrefix>/` after `after` days.
-# Rules belonging to other tenants of the same shared bucket are
-# preserved (rule IDs are namespaced by stack name).
+# `deleteObjects` (optional): JSON-encoded array of S3 lifecycle
+# rules. Each entry creates one rule that expires objects under
+# `<assigned-prefix>/<subPrefix>/` after `after` days. Rules
+# belonging to other tenants of the same shared bucket are preserved.
 #
-# Example: auto-expire ephemeral email attachments after 7 days.
+# It MUST be a JSON-encoded string here, not an inline YAML array —
+# hereya passes parameter values through `String(value)` to env vars,
+# which would otherwise mangle objects into `"[object Object]"`.
 #
-# deleteObjects:
-#   - after: 7
-#     subPrefix: attachments
-#   - after: 30
-#     subPrefix: reports
+# Example: auto-expire ephemeral email attachments after 7 days,
+# reports after 30:
+#
+# deleteObjects: '[{"after": 7, "subPrefix": "attachments"}, {"after": 30, "subPrefix": "reports"}]'
