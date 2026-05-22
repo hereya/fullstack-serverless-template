@@ -47,6 +47,6 @@ devDeploy:
 
 deploy:
   hereya/aws-app-lambda:
-    version: 0.5.2
+    version: 0.5.3
 
 preDeployCommand: npm install && npm run build
