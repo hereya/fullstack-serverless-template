@@ -34,6 +34,11 @@ pattern doc that matches the user's request.
 3. **`hereyaconfig/hereyavars/*.yaml` IS editable** — those are package
    *parameters*, not package code. Use them to flip a package between
    modes (e.g. auto-Route 53 vs. external DNS for the custom domain).
+   Use YAML multi-document with `profile: <name>` to scope params to a
+   specific workspace profile — required when a param creates a shared
+   external resource (custom domain, Postmark sender) that can't be
+   claimed twice. See [`docs/custom-domain.md`](docs/custom-domain.md)
+   Mode B for the canonical example.
 4. **"Use" vs. "don't use" a feature is a CODE decision.** A
    marketing-only app simply doesn't write code that calls the
    pattern-specific helpers. Packages stay in `hereya.yaml`; env vars

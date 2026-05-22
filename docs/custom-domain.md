@@ -82,18 +82,52 @@ sends from `auth@<sub>.<root>` and CloudFront serves at
 **When**: the user owns the domain at a registrar like Cloudflare,
 Namecheap, GoDaddy, etc. — and is willing to copy DNS records once.
 
+Use **YAML multi-document** form to scope the custom domain to the
+production workspace only. The default doc (no `profile`) applies to
+dev / staging workspaces, which fall back to the package's auto-Route 53
+subdomain. The second doc, gated on `profile: production`, sets the
+custom domain.
+
 `hereyaconfig/hereyavars/hereya--aws-app-lambda.yaml`:
 
 ```yaml
+# Default (dev / staging): auto-Route 53 subdomain.
+{}
+
+---
+profile: production
 domain: "app.example.com"
 ```
 
 `hereyaconfig/hereyavars/hereya--postmark-app-server.yaml`:
 
 ```yaml
+{}
+
+---
+profile: production
 domain: "app.example.com"
 provisionDomain: true
 ```
+
+> **Why two docs?** `hereyaconfig/hereyavars/*.yaml` params apply to
+> every workspace by default. With the `profile: production` gate,
+> only the workspace whose profile is `production` claims the custom
+> domain. Dev workspaces (profile `-`) get the package's auto-Route 53
+> subdomain, so `hereya up` in dev doesn't fight prod over the same
+> CloudFront alias or Postmark sender domain — Postmark in particular
+> allows only one sender per domain and will fail the second `tofu
+> apply` with "Provider produced inconsistent result after apply".
+> The empty `{}` on the first doc is important: a file containing
+> only the production block with no default doc would still apply
+> the prod settings to every workspace.
+
+> **Mode A doesn't strictly need this** — auto-Route 53 generates a
+> distinct `random_pet` subdomain per workspace, so there's no shared
+> external resource to collide on. But the same `profile: production`
+> shape is worth applying preemptively if you expect to add a second
+> prod-like workspace later (e.g. a `staging` workspace that also
+> wants a stable hostname).
 
 **Deploy is two passes.**
 

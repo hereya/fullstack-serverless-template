@@ -1,4 +1,4 @@
-# Auto-Route53 mode.
+# Default (dev / staging) — auto-Route53 mode.
 #
 # The workspace exposes `defaultRootDomain` (a Route 53 hosted zone it
 # owns). The package generates a random collision-safe subdomain via
@@ -11,5 +11,17 @@
 # postmarkAccountToken comes from a workspace secret. Each workspace
 # gets its own unique Postmark domain registration since the random
 # subdomain differs per workspace.
-
 provisionDomain: true
+
+---
+# Production custom domain (Mode B, external DNS). Uncomment + set
+# when ready. The `profile:` key scopes this doc to workspaces whose
+# profile is `production` — only that workspace claims the Postmark
+# sender for the custom domain. Postmark refuses to register the
+# same sender domain twice, so without this scoping a second
+# workspace's `hereya up` would fail mid-flight with "Provider
+# produced inconsistent result after apply".
+#
+# profile: production
+# domain: "yourdomain.com"
+# provisionDomain: true

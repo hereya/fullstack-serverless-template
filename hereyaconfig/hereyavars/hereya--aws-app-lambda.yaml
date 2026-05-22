@@ -1,4 +1,4 @@
-# Auto-Route53 mode.
+# Default (dev / staging) — auto-Route53 mode.
 #
 # `domain` left empty so the stack reads `effectiveDomain` from the
 # workspace env (set by hereya/postmark-app-server's output) and uses
@@ -9,3 +9,15 @@
 # (one-deploy, auto-validated against Route 53) and creates ALIAS
 # A/AAAA records for apex + www pointing at the CloudFront
 # distribution. No manual DNS records required.
+{}
+
+---
+# Production custom domain (Mode B, external DNS). Uncomment + set
+# when ready. The `profile:` key scopes this doc to workspaces whose
+# profile is `production`; other workspaces fall back to the default
+# doc above. This keeps dev workspaces from trying to claim the same
+# custom domain as prod, which would collide on CloudFront aliases
+# and on Postmark's per-domain sender record.
+#
+# profile: production
+# domain: "yourdomain.com"
