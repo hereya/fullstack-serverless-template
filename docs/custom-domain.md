@@ -114,10 +114,12 @@ provisionDomain: true
 2. **Second pass** — once the records are live and ACM has validated
    the cert (DNS propagation + ACM's poll cadence; usually a few
    minutes), redeploy. Two things happen in this one pass:
-   - The `aws-app-lambda` package's synth reads the cert's live status
-     directly from ACM (`aws acm list-certificates` keyed on the
-     domain name) and, on seeing `ISSUED`, attaches the apex + www
-     aliases plus the ACM cert to the CloudFront distribution.
+   - The `aws-app-lambda` package's synth reads the cert's live
+     status from ACM (`aws acm list-certificates` keyed on the
+     domain name, then narrowed to the cert carrying this stack's
+     `hereya:stackName` tag) and, on seeing `ISSUED`, attaches the
+     apex + www aliases plus the ACM cert to the CloudFront
+     distribution.
    - The `postmark-app-server` package's apply fires
      `PUT /domains/<id>/verifyDkim` and `verifyReturnPath` directly
      against Postmark's API, forcing an immediate authoritative DNS
@@ -128,11 +130,31 @@ provisionDomain: true
 After pass two: `https://app.example.com` is live, Postmark sends from
 `auth@app.example.com`.
 
-> **No SSM round-trip.** Earlier versions of `hereya/aws-app-lambda`
-> bridged the synth-time / deploy-time gap by writing the cert status
-> to `/hereya/<stack>/certStatus` in SSM, which forced a third deploy
-> to read it back. As of `0.5.1` the package queries ACM directly at
-> synth time — the cert itself is the single source of truth.
+> **Why the lookup is tag-scoped, not just by-domain.** Earlier
+> `0.5.x` builds queried `aws acm list-certificates` by domain name
+> only. This broke when an unrelated ACM cert for the same hostname
+> already existed in the account — e.g. a stale cert left behind by a
+> previously hand-rolled CloudFront. The stale cert satisfied the
+> by-domain lookup as `ISSUED`, so the stack marked aliases enabled
+> and wired its own freshly-requested PENDING cert into the
+> Distribution; CloudFront rejected the pending cert with a 400 and
+> rolled the stack back before any DNS-record outputs were ever
+> emitted. As of `0.5.3` the package tags every cert it owns with
+> `hereya:stackName=<stackName>` (via a dedicated `TagCertCr` custom
+> resource that runs after `RequestCertCr`) and the synth-time
+> lookup filters by that tag, so unrelated certs in the account are
+> invisible to the gate.
+>
+> **Upgrading from `<0.5.3` is transparent.** Existing deploys' certs
+> are untagged, but `RequestCertCr`'s inputs (domain, SANs,
+> IdempotencyToken) are byte-identical to <0.5.3 — so CFn does not
+> fire its Update event and ACM does not re-issue the cert. The new
+> `TagCertCr` resource Creates on the first 0.5.3 deploy and tags
+> the existing cert. On that one deploy the synth-time lookup hits a
+> fallback path: it queries CloudFormation for the stack's prior
+> `certificateArn` output, uses that ARN's live Status, and the
+> Distribution's aliases stay attached for the whole upgrade.
+> Subsequent deploys use the by-tag fast path directly.
 
 ---
 
